@@ -17,6 +17,7 @@ import {
   MOCK_EMAIL_TO_ACCOUNT,
   MOCK_SIMULATION_ADMIN_PENDING_NEW,
   MOCK_SIMULATION_APPLICATIONS,
+  MOCK_SIMULATION_AUDIT_LOGS,
   MOCK_SIMULATION_BOOKINGS,
   MOCK_SIMULATION_LOANS,
   MOCK_SIMULATION_MAINTENANCE,
@@ -26,6 +27,7 @@ import {
   type MockAccountKey,
 } from "@/services/mock/mock-fixtures";
 import type {
+  AuditLogEntry,
   Booking,
   KomtingApplication,
   Loan,
@@ -64,6 +66,9 @@ const mockQrTokenStore = new Map<string, { booking_id: string }>(
 const mockIdempotencyStore = new Map<string, { payloadHash: string; booking: Booking }>();
 const mockStaffIdempotencyStore = new Map<string, { payloadHash: string; result: unknown }>();
 const mockOperatingHoursStore = new Map<string, OperatingHoursSnapshot>();
+const mockAuditLogsStore: AuditLogEntry[] = MOCK_SIMULATION_AUDIT_LOGS.map((entry) => ({
+  ...entry,
+}));
 
 function resolveMockQrDisplayContext(komtingId: string, projectorId: string) {
   const komtingProfile = Object.values(MOCK_SIMULATION_PROFILES).find((p) => p.id === komtingId);
@@ -1630,24 +1635,57 @@ export const mockServices: ServiceRegistry = {
 
   auditLog: {
     async listAuditLogs(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      requireAdminMock();
+      const page = Math.max(1, params?.page ?? 1);
+      const pageSize = Math.max(1, params?.page_size ?? 20);
+      if (scenario === "empty") {
+        return wrapMockList([], page, pageSize);
+      }
+
+      const entityType = params?.entity_type?.trim();
+      const entityId = params?.entity_id?.trim();
+
+      const filtered = mockAuditLogsStore.filter((entry) => {
+        if (entityType && entry.entity_type !== entityType) {
+          return false;
+        }
+        if (entityId && entry.entity_id !== entityId) {
+          return false;
+        }
+        return true;
+      });
+
+      const totalItems = filtered.length;
+      const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / pageSize);
+      const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+      return {
+        data: paged.map((entry) => ({ ...entry })),
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: totalItems,
+            total_pages: totalPages,
+          },
+        },
+      };
     },
     async getAuditLog(auditLogId) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: auditLogId,
-        actor_user_id: "sim_user_admin_01",
-        actor_role: "ADMIN",
-        action: "SIMULATION",
-        entity_type: "BOOKING",
-        entity_id: "sim_entity_01",
-        before_data: null,
-        after_data: null,
-        reason: null,
-        request_id: createMockRequestId(),
-        created_at: new Date().toISOString(),
-      });
+      requireAdminMock();
+      const found = mockAuditLogsStore.find((entry) => entry.id === auditLogId);
+      if (!found) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Catatan audit dengan ID ${auditLogId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      return wrapMockSingle({ ...found });
     },
   },
 };

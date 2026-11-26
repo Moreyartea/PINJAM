@@ -1,4 +1,5 @@
 import type {
+  AuditLogEntry,
   Booking,
   KomtingApplication,
   KomtingDashboardSummary,
@@ -273,6 +274,108 @@ export const MOCK_SIMULATION_QR_TOKENS: Record<string, { booking_id: string }> =
   sim_qr_pickup_ready_01: { booking_id: "sim_booking_pickup_01" },
   sim_qr_return_active_01: { booking_id: "sim_booking_return_01" },
 };
+
+export const MOCK_SIMULATION_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: "sim_audit_01",
+    actor_user_id: "sim_user_admin_01",
+    actor_role: "ADMIN",
+    action: "OPERATING_HOURS_UPDATED",
+    entity_type: "OPERATING_HOURS",
+    entity_id: "sim_hours_01",
+    before_data: {
+      day_of_week: "MONDAY",
+      open_time: "07:00",
+      close_time: "17:00",
+      is_active: true,
+    },
+    after_data: {
+      day_of_week: "MONDAY",
+      open_time: "07:00",
+      close_time: "18:00",
+      is_active: true,
+    },
+    reason: "Penyesuaian jadwal kuliah sore semester berjalan",
+    request_id: "req_sim_audit_01",
+    created_at: "2026-09-21T02:15:00Z",
+  },
+  {
+    id: "sim_audit_02",
+    actor_user_id: "sim_user_staff_01",
+    actor_role: "STAFF",
+    action: "LOAN_RETURNED",
+    entity_type: "LOAN",
+    entity_id: "sim_loan_01",
+    before_data: {
+      status: "ACTIVE",
+      returned_at: null,
+      return_condition: null,
+    },
+    after_data: {
+      status: "RETURNED",
+      returned_at: "2026-09-21T01:45:00Z",
+      return_condition: "GOOD",
+    },
+    reason: null,
+    request_id: "req_sim_audit_02",
+    created_at: "2026-09-21T01:45:12Z",
+  },
+  {
+    id: "sim_audit_03",
+    actor_user_id: "sim_user_admin_01",
+    actor_role: "ADMIN",
+    action: "KOMTING_APPLICATION_APPROVED",
+    entity_type: "KOMTING_APPLICATION",
+    entity_id: "sim_app_01",
+    before_data: {
+      status: "PENDING_REVIEW",
+      verified_by_user_id: null,
+    },
+    after_data: {
+      status: "APPROVED",
+      verified_by_user_id: "sim_user_admin_01",
+    },
+    reason: "Bukti KRS tervalidasi sesuai kelas IK-2024-A",
+    request_id: "req_sim_audit_03",
+    created_at: "2026-09-20T10:30:00Z",
+  },
+  {
+    id: "sim_audit_04",
+    actor_user_id: "sim_user_admin_01",
+    actor_role: "ADMIN",
+    action: "PROJECTOR_STATUS_CHANGED",
+    entity_type: "PROJECTOR",
+    entity_id: "sim_proj_03",
+    before_data: {
+      status: "AVAILABLE",
+      code: "PRJ-03",
+    },
+    after_data: {
+      status: "MAINTENANCE",
+      code: "PRJ-03",
+    },
+    reason: "Lampu redup dan perlu pengecekan teknisi",
+    request_id: "req_sim_audit_04",
+    created_at: "2026-09-19T08:05:00Z",
+  },
+  {
+    id: "sim_audit_05",
+    actor_user_id: "sim_user_komting_01",
+    actor_role: "KOMTING",
+    action: "BOOKING_CREATED",
+    entity_type: "BOOKING",
+    entity_id: "sim_booking_pickup_01",
+    before_data: null,
+    after_data: {
+      status: "APPROVED",
+      projector_id: "sim_proj_01",
+      room: "R-201",
+    },
+    reason: "Perkuliahan Metode Numerik",
+    request_id: "req_sim_audit_05",
+    created_at: "2026-09-18T06:20:00Z",
+  },
+];
 
 export function createMockKomtingDashboard(profile: UserProfile): KomtingDashboardSummary {
   return {
