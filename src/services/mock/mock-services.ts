@@ -1,5 +1,10 @@
 import { ApiClientError } from "@/lib/api/errors";
 import { getActiveAccessToken } from "@/lib/auth/provider-adapter";
+import {
+  getJakartaDateString,
+  getJakartaTomorrowDateString,
+  jakartaDateTimeToUtcIso,
+} from "@/lib/utils/date";
 import type { ServiceRegistry } from "@/services/contracts";
 import {
   createMockRequestId,
@@ -11,11 +16,18 @@ import {
   createMockKomtingDashboard,
   MOCK_EMAIL_TO_ACCOUNT,
   MOCK_SIMULATION_APPLICATIONS,
+  MOCK_SIMULATION_BOOKINGS,
+  MOCK_SIMULATION_LOANS,
   MOCK_SIMULATION_PROFILES,
   MOCK_SIMULATION_PROJECTORS,
   type MockAccountKey,
 } from "@/services/mock/mock-fixtures";
-import type { KomtingApplication, UserProfile } from "@/types/domain";
+import type {
+  Booking,
+  KomtingApplication,
+  OperatingHoursSnapshot,
+  UserProfile,
+} from "@/types/domain";
 
 const MOCK_SESSION_STORAGE_KEY = "pinjam_dev_mock_session";
 
@@ -26,6 +38,32 @@ interface StoredMockSession {
 
 let memoryMockSession: StoredMockSession | null = null;
 let latestSubmittedMockApplication: KomtingApplication | null = null;
+const mockBookingsStore: Booking[] = [...MOCK_SIMULATION_BOOKINGS];
+const mockIdempotencyStore = new Map<string, { payloadHash: string; booking: Booking }>();
+
+function getMockOperatingHoursForDate(date: string): OperatingHoursSnapshot {
+  const tomorrow = getJakartaTomorrowDateString();
+  return {
+    service_date: date,
+    timezone: "Asia/Jakarta",
+    opens_at: "08:00:00",
+    closes_at: date === tomorrow ? "16:30:00" : "17:00:00",
+    configured_open_at: "08:00:00",
+    early_pickup_allowed_at: "07:45:00",
+  };
+}
+
+function buildMockPickupWindow(date: string, startTime: string, earlyAllowed: string) {
+  const startUtc = new Date(`${date}T${startTime}+07:00`);
+  const earlyUtc = new Date(`${date}T${earlyAllowed}+07:00`);
+  const thirtyMinBefore = new Date(startUtc.getTime() - 30 * 60 * 1000);
+  const opensAt = thirtyMinBefore > earlyUtc ? thirtyMinBefore : earlyUtc;
+  const closesAt = new Date(startUtc.getTime() + 15 * 60 * 1000);
+  return {
+    opens_at: opensAt.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    closes_at: closesAt.toISOString().replace(/\.\d{3}Z$/, "Z"),
+  };
+}
 
 function readMockSession(): StoredMockSession | null {
   if (memoryMockSession) return memoryMockSession;
@@ -399,72 +437,214 @@ export const mockServices: ServiceRegistry = {
   availability: {
     async checkAvailability(params) {
       await simulateMockRequest();
+      const projector = MOCK_SIMULATION_PROJECTORS.find((p) => p.id === params.projector_id);
+      if (!projector) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const today = getJakartaDateString();
+      const tomorrow = getJakartaTomorrowDateString();
+      const operatingHours = getMockOperatingHoursForDate(params.date);
+
+      let isBookable = false;
+      let message: string | null = null;
+
+      if (projector.physical_status === "MAINTENANCE" || projector.physical_status === "INACTIVE") {
+        isBookable = false;
+        message =
+          "Unit sedang dalam maintenance atau nonaktif sehingga tidak dapat dibooking (simulasi).";
+      } else if (projector.physical_status === "BORROWED") {
+        if (params.date === tomorrow) {
+          isBookable = true;
+          message =
+            "Unit sedang BORROWED hari ini. Booking besok bersifat bersyarat dan akan dibatalkan pukul 00:00 WIB bila unit belum dikembalikan.";
+        } else {
+          isBookable = false;
+          message = "Unit sedang BORROWED hari ini sehingga belum tersedia untuk booking hari ini.";
+        }
+      } else if (params.date !== today && params.date !== tomorrow) {
+        isBookable = false;
+        message = "Booking hanya tersedia untuk hari ini atau besok (Asia/Jakarta).";
+      } else {
+        isBookable = true;
+      }
+
       return wrapMockSingle({
-        projector_id: params.projector_id,
+        projector_id: projector.id,
         date: params.date,
-        is_bookable: false,
-        physical_status: "AVAILABLE",
-        operating_hours: {
-          service_date: params.date,
-          timezone: "Asia/Jakarta",
-          opens_at: "08:00:00",
-          closes_at: "17:00:00",
-          early_pickup_allowed_at: "07:45:00",
-        },
-        message: "Simulasi FE-1: pengecekan jadwal booking dikerjakan pada Sprint FE-2.",
+        is_bookable: isBookable,
+        physical_status: projector.physical_status,
+        operating_hours: operatingHours,
+        message,
       });
     },
   },
 
   booking: {
-    async createBooking(payload) {
+    async createBooking(payload, idempotencyKey) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: "sim_booking_01",
-        booking_code: "BKG-SIM-001",
-        komting_id: "sim_user_komting_01",
+      const profile = resolveCurrentMockProfile();
+
+      if (profile.account_status !== "ACTIVE") {
+        throw new ApiClientError({
+          status: 403,
+          code: "ACCOUNT_NOT_ACTIVE",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (profile.komting_assignment?.status !== "ACTIVE") {
+        throw new ApiClientError({
+          status: 403,
+          code: "KOMTING_ASSIGNMENT_REQUIRED",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const payloadHash = JSON.stringify(payload);
+      const existingIdemp = mockIdempotencyStore.get(idempotencyKey);
+      if (existingIdemp) {
+        if (existingIdemp.payloadHash !== payloadHash) {
+          throw new ApiClientError({
+            status: 409,
+            code: "IDEMPOTENCY_KEY_REUSED",
+            requestId: createMockRequestId(),
+          });
+        }
+        return wrapMockSingle(existingIdemp.booking);
+      }
+
+      const hasActiveBooking = mockBookingsStore.some(
+        (b) => b.komting_id === profile.id && b.status === "CONFIRMED"
+      );
+      if (hasActiveBooking) {
+        throw new ApiClientError({
+          status: 409,
+          code: "ACTIVE_BOOKING_EXISTS",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const projector = MOCK_SIMULATION_PROJECTORS.find((p) => p.id === payload.projector_id);
+      if (!projector) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (projector.physical_status === "MAINTENANCE" || projector.physical_status === "INACTIVE") {
+        throw new ApiClientError({
+          status: 409,
+          code: "PROJECTOR_NOT_BOOKABLE",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const hours = getMockOperatingHoursForDate(payload.booking_date);
+      const id = `sim_booking_${Date.now().toString(36)}`;
+      const created: Booking = {
+        id,
+        booking_code: `SIM-BKG-${payload.booking_date.replace(/-/g, "")}-${String(
+          mockBookingsStore.length + 1
+        ).padStart(3, "0")}`,
+        komting_id: profile.id,
         projector_id: payload.projector_id,
         booking_date: payload.booking_date,
         start_time: payload.start_time,
         estimated_return_at: payload.estimated_return_at,
         status: "CONFIRMED",
-        pickup_window: {
-          opens_at: payload.estimated_return_at,
-          closes_at: payload.estimated_return_at,
-        },
-        created_at: new Date().toISOString(),
-      });
+        pickup_window: buildMockPickupWindow(
+          payload.booking_date,
+          payload.start_time,
+          hours.early_pickup_allowed_at
+        ),
+        created_at: jakartaDateTimeToUtcIso(getJakartaDateString(), "08:00:00"),
+      };
+
+      mockBookingsStore.unshift(created);
+      mockIdempotencyStore.set(idempotencyKey, { payloadHash, booking: created });
+
+      return wrapMockSingle(created);
     },
+
     async listKomtingBookings(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const profile = resolveCurrentMockProfile();
+      const filtered = mockBookingsStore.filter((item) => {
+        if (item.komting_id !== profile.id) return false;
+        if (params?.status && item.status !== params.status) return false;
+        return true;
+      });
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
+
     async getKomtingBooking(bookingId) {
       await simulateMockRequest();
-      throw new ApiClientError({
-        status: 404,
-        code: "PROJECTOR_NOT_FOUND",
-        message: `Simulasi: booking ${bookingId} belum tersedia.`,
-        requestId: createMockRequestId(),
-      });
+      const found = mockBookingsStore.find((b) => b.id === bookingId);
+      if (!found) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: booking ${bookingId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      return wrapMockSingle(found);
     },
+
     async cancelKomtingBooking(bookingId) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: bookingId,
-        booking_code: "BKG-SIM-001",
-        komting_id: "sim_user_komting_01",
-        projector_id: "sim_prj_01",
-        booking_date: "2026-11-26",
-        start_time: "09:00:00",
-        estimated_return_at: new Date().toISOString(),
+      const index = mockBookingsStore.findIndex((b) => b.id === bookingId);
+      if (index === -1) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: booking ${bookingId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const target = mockBookingsStore[index];
+      if (!target || target.status !== "CONFIRMED") {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_CONFLICT",
+          message: "Hanya booking berstatus CONFIRMED yang dapat dibatalkan.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const updated: Booking = {
+        ...target,
         status: "CANCELLED",
-        pickup_window: {
-          opens_at: new Date().toISOString(),
-          closes_at: new Date().toISOString(),
-        },
-        created_at: new Date().toISOString(),
-      });
+      };
+      mockBookingsStore[index] = updated;
+      return wrapMockSingle(updated);
     },
     async listStaffBookings(params) {
       await simulateMockRequest();
@@ -515,17 +695,62 @@ export const mockServices: ServiceRegistry = {
       });
     },
     async listKomtingLoans(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const profile = resolveCurrentMockProfile();
+      const filtered = MOCK_SIMULATION_LOANS.filter((item) => {
+        if (item.komting_id !== profile.id) return false;
+        if (params?.status && item.status !== params.status) return false;
+        return true;
+      });
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
   },
 
   qr: {
-    async getBookingQr() {
+    async getBookingQr(bookingId) {
       await simulateMockRequest();
+      const booking = mockBookingsStore.find((b) => b.id === bookingId);
+      if (!booking) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (booking.status !== "CONFIRMED" && booking.status !== "FULFILLED") {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_NOT_PICKUP_ELIGIBLE",
+          message: "QR tidak tersedia untuk booking yang sudah dibatalkan atau kedaluwarsa.",
+          requestId: createMockRequestId(),
+        });
+      }
       return wrapMockSingle({
-        qr_payload: "sim_opaque_qr_token",
-        expires_at: new Date().toISOString(),
+        qr_payload: `sim_opaque_token_${booking.booking_code.slice(-3)}_${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        expires_at: booking.pickup_window.closes_at,
       });
     },
     async validateQr(payload) {
@@ -597,14 +822,7 @@ export const mockServices: ServiceRegistry = {
   operatingHours: {
     async getOperatingHours(date) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        service_date: date,
-        timezone: "Asia/Jakarta",
-        opens_at: "08:00:00",
-        closes_at: "17:00:00",
-        configured_open_at: "08:00:00",
-        early_pickup_allowed_at: "07:45:00",
-      });
+      return wrapMockSingle(getMockOperatingHoursForDate(date));
     },
     async updateOperatingHours(date, payload) {
       await simulateMockRequest();
@@ -633,7 +851,14 @@ export const mockServices: ServiceRegistry = {
           reminders: [],
         });
       }
-      return wrapMockSingle(createMockKomtingDashboard(profile));
+      const baseDashboard = createMockKomtingDashboard(profile);
+      const activeBooking =
+        mockBookingsStore.find((b) => b.komting_id === profile.id && b.status === "CONFIRMED") ??
+        null;
+      return wrapMockSingle({
+        ...baseDashboard,
+        active_booking: activeBooking,
+      });
     },
 
     async getStaffDashboard() {

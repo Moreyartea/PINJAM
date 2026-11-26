@@ -9,6 +9,9 @@ import { useAuth } from "@/lib/auth/auth-context";
 const KOMTING_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/komting" },
   { label: "Daftar Proyektor", href: "/komting/projectors" },
+  { label: "Booking Baru", href: "/komting/bookings/new" },
+  { label: "Daftar Booking", href: "/komting/bookings" },
+  { label: "Riwayat Peminjaman", href: "/komting/loans" },
   { label: "Status Pengajuan", href: "/application/status" },
 ];
 

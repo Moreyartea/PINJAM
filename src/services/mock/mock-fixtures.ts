@@ -1,6 +1,8 @@
 import type {
+  Booking,
   KomtingApplication,
   KomtingDashboardSummary,
+  Loan,
   Projector,
   UserProfile,
 } from "@/types/domain";
@@ -168,6 +170,37 @@ export const MOCK_SIMULATION_APPLICATIONS: Record<string, KomtingApplication> = 
     rejection_reason: "Contoh penolakan simulasi: foto kartu identitas kurang jelas.",
   },
 };
+
+export const MOCK_SIMULATION_BOOKINGS: Booking[] = [
+  {
+    id: "sim_booking_history_01",
+    booking_code: "SIM-BKG-20261125-001",
+    komting_id: "sim_user_komting_01",
+    projector_id: "sim_prj_01",
+    booking_date: "2026-11-25",
+    start_time: "09:00:00",
+    estimated_return_at: "2026-11-25T05:00:00Z",
+    status: "FULFILLED",
+    pickup_window: {
+      opens_at: "2026-11-25T01:30:00Z",
+      closes_at: "2026-11-25T02:15:00Z",
+    },
+    created_at: "2026-11-24T10:00:00Z",
+  },
+];
+
+export const MOCK_SIMULATION_LOANS: Loan[] = [
+  {
+    id: "sim_loan_01",
+    booking_id: "sim_booking_history_01",
+    projector_id: "sim_prj_01",
+    komting_id: "sim_user_komting_01",
+    status: "RETURNED",
+    picked_up_at: "2026-11-25T02:00:00Z",
+    returned_at: "2026-11-25T04:50:00Z",
+    return_condition: "NORMAL",
+  },
+];
 
 export function createMockKomtingDashboard(profile: UserProfile): KomtingDashboardSummary {
   return {
