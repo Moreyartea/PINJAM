@@ -1,0 +1,638 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
+import { Alert } from "@/components/feedback/alert";
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { PageHeader } from "@/components/layout/app-shell";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useAsyncQuery } from "@/hooks/use-async-query";
+import { normalizeUnknownError } from "@/lib/api/errors";
+import type { ApiListResponse } from "@/lib/api/types";
+import { formatJakartaDateTime } from "@/lib/utils/date";
+import {
+  validateCompleteMaintenanceForm,
+  validateStartMaintenanceForm,
+} from "@/lib/validation/staff";
+import { isMockMode, services } from "@/services";
+import type { MaintenanceRecord, MaintenanceStatus, Projector } from "@/types/domain";
+
+type MaintenanceStatusFilter = "ALL" | MaintenanceStatus;
+
+export function AdminMaintenanceView() {
+  const [statusFilter, setStatusFilter] = useState<MaintenanceStatusFilter>("IN_PROGRESS");
+  const [page, setPage] = useState(1);
+
+  // Start maintenance dialog state
+  const [startTarget, setStartTarget] = useState<Projector | null>(null);
+  const [startReason, setStartReason] = useState("");
+  const [startNote, setStartNote] = useState("");
+  const [startReasonError, setStartReasonError] = useState<string | undefined>(undefined);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  // Complete maintenance dialog state
+  const [completeTarget, setCompleteTarget] = useState<MaintenanceRecord | null>(null);
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [setAvailable, setSetAvailable] = useState(true);
+  const [resolutionError, setResolutionError] = useState<string | undefined>(undefined);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
+
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  const startSubmittingRef = useRef(false);
+  const completeSubmittingRef = useRef(false);
+
+  const {
+    data: maintenanceRes,
+    loading: maintLoading,
+    error: maintError,
+    reload: reloadMaint,
+  } = useAsyncQuery<ApiListResponse<MaintenanceRecord>>(
+    () =>
+      services.maintenance.listMaintenance({
+        page,
+        page_size: 20,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+      }),
+    [page, statusFilter]
+  );
+
+  const {
+    data: projectorsRes,
+    loading: projLoading,
+    error: projError,
+    reload: reloadProjectors,
+  } = useAsyncQuery<ApiListResponse<Projector>>(
+    () => services.projector.listProjectors({ page: 1, page_size: 50 }),
+    []
+  );
+
+  const projectors = useMemo(() => projectorsRes?.data ?? [], [projectorsRes]);
+  const projectorMap = useMemo(() => {
+    const map = new Map<string, Projector>();
+    for (const unit of projectors) {
+      map.set(unit.id, unit);
+    }
+    return map;
+  }, [projectors]);
+
+  const records = useMemo(() => maintenanceRes?.data ?? [], [maintenanceRes]);
+  const pagination = maintenanceRes?.meta.pagination ?? null;
+
+  const activeMaintByProjectorId = useMemo(() => {
+    const map = new Map<string, MaintenanceRecord>();
+    for (const rec of records) {
+      if (rec.status === "IN_PROGRESS" && !map.has(rec.projector_id)) {
+        map.set(rec.projector_id, rec);
+      }
+    }
+    return map;
+  }, [records]);
+
+  const maintenanceUnits = useMemo(
+    () => projectors.filter((unit) => unit.physical_status === "MAINTENANCE"),
+    [projectors]
+  );
+
+  const availableUnits = useMemo(
+    () => projectors.filter((unit) => unit.physical_status === "AVAILABLE" && unit.is_active),
+    [projectors]
+  );
+
+  const handleOpenCompleteDialog = (record: MaintenanceRecord) => {
+    setCompleteError(null);
+    setResolutionError(undefined);
+    setResolutionNote("");
+    setSetAvailable(true);
+    setCompleteTarget(record);
+  };
+
+  const handleStartMaintenance = async () => {
+    if (!startTarget || startSubmittingRef.current) return;
+    setStartError(null);
+
+    const validation = validateStartMaintenanceForm({ reason: startReason });
+    setStartReasonError(validation.reason);
+    if (validation.reason) return;
+
+    startSubmittingRef.current = true;
+    setStarting(true);
+    try {
+      await services.maintenance.createMaintenance(startTarget.id, {
+        reason: startReason.trim(),
+        note: startNote.trim() || null,
+      });
+      setActionSuccess(
+        `Unit ${startTarget.asset_code} (${startTarget.name}) berhasil ditandai MAINTENANCE oleh server.`
+      );
+      setStartTarget(null);
+      setStartReason("");
+      setStartNote("");
+      reloadMaint();
+      reloadProjectors();
+    } catch (err) {
+      setStartError(normalizeUnknownError(err).message);
+    } finally {
+      setStarting(false);
+      startSubmittingRef.current = false;
+    }
+  };
+
+  const handleCompleteMaintenance = async () => {
+    if (!completeTarget || completeSubmittingRef.current) return;
+    setCompleteError(null);
+
+    const validation = validateCompleteMaintenanceForm({ resolutionNote });
+    setResolutionError(validation.resolutionNote);
+    if (validation.resolutionNote) return;
+
+    completeSubmittingRef.current = true;
+    setCompleting(true);
+    try {
+      await services.maintenance.completeMaintenance(completeTarget.id, {
+        resolution_note: resolutionNote.trim(),
+        set_projector_available: setAvailable,
+      });
+      setActionSuccess(
+        setAvailable
+          ? "Maintenance selesai dan unit dinyatakan AVAILABLE kembali oleh server."
+          : "Catatan maintenance diselesaikan tanpa mengubah status fisik ke AVAILABLE."
+      );
+      setCompleteTarget(null);
+      setResolutionNote("");
+      reloadMaint();
+      reloadProjectors();
+    } catch (err) {
+      setCompleteError(normalizeUnknownError(err).message);
+    } finally {
+      setCompleting(false);
+      completeSubmittingRef.current = false;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Manajemen Maintenance Proyektor"
+        description="Pemantauan unit berstatus MAINTENANCE serta penetapan kelayakan unit kembali oleh ADMIN."
+        actions={
+          <>
+            {isMockMode && (
+              <Badge tone="warning" symbol="!">
+                DATA SIMULASI DEV
+              </Badge>
+            )}
+            <Link href="/admin/projectors">
+              <Button variant="outline" size="sm">
+                Inventaris Proyektor
+              </Button>
+            </Link>
+            <Link href="/admin">
+              <Button variant="outline" size="sm">
+                Kembali ke Dashboard
+              </Button>
+            </Link>
+          </>
+        }
+      />
+
+      <Alert tone="info" title="Aturan Status Maintenance &amp; Integritas Backend (§11)">
+        <ul className="list-disc pl-4 space-y-1">
+          <li>
+            Menggunakan endpoint bersama STAFF/ADMIN (<code>/api/v1/staff/maintenance</code>,{" "}
+            <code>/api/v1/staff/projectors/{"{projector_id}"}/maintenance</code>, dan{" "}
+            <code>/api/v1/staff/maintenance/{"{maintenance_id}"}/complete</code>).
+          </li>
+          <li>
+            Unit berstatus <code>MAINTENANCE</code> tidak tersedia untuk peminjaman dan tidak
+            otomatis menjadi <code>AVAILABLE</code> meskipun estimasi pengembalian telah lewat.
+          </li>
+          <li>
+            Backend menjadi sumber kebenaran perubahan status fisik serta menjaga histori booking,
+            loan, maintenance, dan audit log tetap utuh.
+          </li>
+        </ul>
+      </Alert>
+
+      {actionSuccess && (
+        <Alert tone="success" title="Status Maintenance Diperbarui">
+          {actionSuccess}
+        </Alert>
+      )}
+
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-bold">Proyektor Berstatus MAINTENANCE</h2>
+            <p className="text-sm text-[var(--color-muted)]">
+              Unit berikut sedang tidak dapat dibooking hingga maintenance diselesaikan dan
+              dinyatakan layak oleh server.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              reloadMaint();
+              reloadProjectors();
+            }}
+            disabled={projLoading || maintLoading}
+          >
+            Muat Ulang Data
+          </Button>
+        </div>
+
+        {projLoading && (
+          <LoadingState
+            title="Memuat Unit Maintenance..."
+            description="Mengambil status fisik proyektor dari server."
+            rows={2}
+          />
+        )}
+
+        {!projLoading && projError && (
+          <ErrorState
+            title="Gagal Memuat Daftar Unit Proyektor"
+            message={projError.message}
+            errorCode={projError.code}
+            onRetry={reloadProjectors}
+          />
+        )}
+
+        {!projLoading && !projError && maintenanceUnits.length === 0 && (
+          <EmptyState
+            title="Tidak Ada Unit Berstatus MAINTENANCE"
+            description="Seluruh unit proyektor saat ini tidak berada dalam status maintenance."
+          />
+        )}
+
+        {!projLoading && !projError && maintenanceUnits.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {maintenanceUnits.map((unit) => {
+              const activeRecord = activeMaintByProjectorId.get(unit.id);
+              return (
+                <Card key={unit.id}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Badge tone="neutral" className="font-mono">
+                        {unit.asset_code}
+                      </Badge>
+                      <StatusBadge status={unit.physical_status} />
+                    </div>
+                    <CardTitle className="mt-3">{unit.name}</CardTitle>
+                    <CardDescription>
+                      {[unit.brand, unit.model].filter(Boolean).join(" • ") || "Unit Proyektor"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <Alert tone="warning" title="Tidak Tersedia untuk Peminjaman">
+                      Proyektor dalam status fisik <code>MAINTENANCE</code> tidak dapat dibooking.
+                    </Alert>
+                    {activeRecord ? (
+                      <div className="space-y-1">
+                        <p>
+                          <strong>Alasan Maintenance:</strong> {activeRecord.reason}
+                        </p>
+                        {activeRecord.note && (
+                          <p className="text-[var(--color-muted)]">
+                            <strong>Catatan:</strong> {activeRecord.note}
+                          </p>
+                        )}
+                        <p className="text-xs text-[var(--color-muted)]">
+                          Mulai: {formatJakartaDateTime(activeRecord.started_at)}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Catatan maintenance aktif (<code>IN_PROGRESS</code>) belum termuat pada
+                        halaman catatan saat ini. Ubah filter catatan atau muat ulang bila perlu.
+                      </p>
+                    )}
+                  </CardContent>
+                  <CardFooter className="justify-between gap-2">
+                    <Link href={`/admin/projectors/${encodeURIComponent(unit.id)}`}>
+                      <Button variant="outline" size="sm">
+                        Detail Unit
+                      </Button>
+                    </Link>
+                    {activeRecord && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleOpenCompleteDialog(activeRecord)}
+                      >
+                        Selesaikan &amp; Nyatakan Layak
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4 pt-4 border-t-2 border-[var(--border-color)]">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div className="w-full sm:w-80">
+            <Select
+              id="admin-maintenance-status-filter"
+              label="Filter Catatan Maintenance"
+              value={statusFilter}
+              options={[
+                { value: "IN_PROGRESS", label: "IN_PROGRESS — Sedang Diperbaiki" },
+                { value: "COMPLETED", label: "COMPLETED — Selesai" },
+                { value: "ALL", label: "Semua Catatan" },
+              ]}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as MaintenanceStatusFilter);
+                setPage(1);
+              }}
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={reloadMaint} disabled={maintLoading}>
+            Muat Ulang Catatan
+          </Button>
+        </div>
+
+        {maintLoading && (
+          <LoadingState
+            title="Memuat Catatan Maintenance..."
+            description="Mengambil riwayat catatan maintenance proyektor dari server."
+            rows={3}
+          />
+        )}
+
+        {!maintLoading && maintError && (
+          <ErrorState
+            title="Gagal Memuat Catatan Maintenance"
+            message={maintError.message}
+            errorCode={maintError.code}
+            onRetry={reloadMaint}
+          />
+        )}
+
+        {!maintLoading && !maintError && records.length === 0 && (
+          <EmptyState
+            title="Belum Ada Catatan Maintenance"
+            description="Tidak ada catatan maintenance untuk status filter yang dipilih."
+          />
+        )}
+
+        {!maintLoading && !maintError && records.length > 0 && (
+          <>
+            <div className="grid gap-4 md:grid-cols-2">
+              {records.map((rec) => {
+                const unit = projectorMap.get(rec.projector_id);
+                return (
+                  <Card key={rec.id}>
+                    <CardHeader>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="neutral" className="font-mono">
+                            {unit?.asset_code ?? rec.projector_id}
+                          </Badge>
+                          {unit && <StatusBadge status={unit.physical_status} />}
+                        </div>
+                        <StatusBadge status={rec.status} />
+                      </div>
+                      <CardTitle className="mt-3">{unit?.name ?? rec.projector_id}</CardTitle>
+                      <CardDescription>
+                        ID Catatan: <span className="font-mono">{rec.id}</span> • Mulai:{" "}
+                        {formatJakartaDateTime(rec.started_at)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p>
+                        <strong>Alasan:</strong> {rec.reason}
+                      </p>
+                      {rec.note && (
+                        <p className="text-[var(--color-muted)]">
+                          <strong>Catatan:</strong> {rec.note}
+                        </p>
+                      )}
+                      {rec.completed_at && (
+                        <p className="text-xs text-[var(--color-muted)]">
+                          Selesai: {formatJakartaDateTime(rec.completed_at)}
+                        </p>
+                      )}
+                      {rec.resolution_note && (
+                        <Alert tone="success" title="Catatan Penyelesaian">
+                          {rec.resolution_note}
+                        </Alert>
+                      )}
+                    </CardContent>
+                    <CardFooter className="justify-between gap-2">
+                      <Link href={`/staff/maintenance/${encodeURIComponent(rec.id)}`}>
+                        <Button variant="outline" size="sm">
+                          Detail Catatan
+                        </Button>
+                      </Link>
+                      {rec.status === "IN_PROGRESS" && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleOpenCompleteDialog(rec)}
+                        >
+                          Selesaikan Maintenance
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {pagination && pagination.total_pages > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <p className="text-sm text-[var(--color-muted)]">
+                  Halaman <strong>{pagination.page}</strong> dari{" "}
+                  <strong>{pagination.total_pages}</strong> ({pagination.total_items} catatan)
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1 || maintLoading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= pagination.total_pages || maintLoading}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Berikutnya
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="space-y-4 pt-4 border-t-2 border-[var(--border-color)]">
+        <div>
+          <h2 className="text-xl font-bold">Tandai Unit Tersedia ke Maintenance</h2>
+          <p className="text-sm text-[var(--color-muted)]">
+            Hanya unit aktif berstatus <code>AVAILABLE</code> yang dapat dimasukkan ke maintenance
+            melalui konfirmasi backend.
+          </p>
+        </div>
+
+        {!projLoading && !projError && availableUnits.length === 0 && (
+          <EmptyState
+            title="Tidak Ada Unit AVAILABLE Saat Ini"
+            description="Tidak ada unit aktif berstatus AVAILABLE yang dapat dipindahkan ke maintenance."
+          />
+        )}
+
+        {!projLoading && !projError && availableUnits.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {availableUnits.map((unit) => (
+              <Card key={unit.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge tone="neutral" className="font-mono">
+                      {unit.asset_code}
+                    </Badge>
+                    <StatusBadge status={unit.physical_status} />
+                  </div>
+                  <CardTitle className="mt-3">{unit.name}</CardTitle>
+                  <CardDescription>
+                    {[unit.brand, unit.model].filter(Boolean).join(" • ") || "Unit Proyektor"}
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter className="justify-end">
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    onClick={() => {
+                      setStartError(null);
+                      setStartReasonError(undefined);
+                      setStartReason("");
+                      setStartNote("");
+                      setStartTarget(unit);
+                    }}
+                  >
+                    Tandai Maintenance
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <ConfirmDialog
+        open={Boolean(startTarget)}
+        onClose={() => {
+          if (!starting) setStartTarget(null);
+        }}
+        onConfirm={handleStartMaintenance}
+        title={`Tandai ${startTarget?.asset_code ?? "Unit"} Maintenance?`}
+        description="Unit tidak dapat dipinjam sampai maintenance diselesaikan. Booking terdampak akan dibatalkan oleh backend dan komting diberitahu."
+        confirmLabel="Ya, Tandai Maintenance"
+        cancelLabel="Batal"
+        confirmVariant="warning"
+        isConfirming={starting}
+      >
+        <div className="space-y-3">
+          {startError && (
+            <Alert tone="danger" title="Gagal Mengubah Status">
+              {startError}
+            </Alert>
+          )}
+          <Input
+            id="admin-maint-start-reason"
+            label="Alasan Maintenance"
+            placeholder="Contoh: Lampu proyektor bermasalah."
+            required
+            value={startReason}
+            onChange={(e) => {
+              setStartReason(e.target.value);
+              if (startReasonError) setStartReasonError(undefined);
+            }}
+            error={startReasonError}
+            disabled={starting}
+          />
+          <Textarea
+            id="admin-maint-start-note"
+            label="Catatan Tambahan (Opsional)"
+            placeholder="Detail pemeriksaan teknisi..."
+            value={startNote}
+            onChange={(e) => setStartNote(e.target.value)}
+            disabled={starting}
+          />
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(completeTarget)}
+        onClose={() => {
+          if (!completing) setCompleteTarget(null);
+        }}
+        onConfirm={handleCompleteMaintenance}
+        title="Selesaikan Maintenance Unit?"
+        description="Backend akan memeriksa tidak adanya loan aktif sebelum mengembalikan unit ke status AVAILABLE."
+        confirmLabel="Ya, Selesaikan Maintenance"
+        cancelLabel="Batal"
+        confirmVariant="primary"
+        isConfirming={completing}
+      >
+        <div className="space-y-3">
+          {completeError && (
+            <Alert tone="danger" title="Gagal Menyelesaikan Maintenance">
+              {completeError}
+            </Alert>
+          )}
+          <Textarea
+            id="admin-maint-resolution-note"
+            label="Catatan Penyelesaian"
+            placeholder="Contoh: Unit telah diperiksa dan dapat digunakan kembali."
+            required
+            value={resolutionNote}
+            onChange={(e) => {
+              setResolutionNote(e.target.value);
+              if (resolutionError) setResolutionError(undefined);
+            }}
+            error={resolutionError}
+            disabled={completing}
+          />
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={setAvailable}
+              onChange={(e) => setSetAvailable(e.target.checked)}
+              disabled={completing}
+              className="mt-1 h-4 w-4 accent-[var(--color-ink)]"
+            />
+            <span>
+              Nyatakan unit layak digunakan kembali dan ubah status fisik menjadi{" "}
+              <strong>AVAILABLE</strong>.
+            </span>
+          </label>
+        </div>
+      </ConfirmDialog>
+    </div>
+  );
+}

@@ -55,6 +55,7 @@ describe("AdminShell & Role Navigation", () => {
       "/admin/assignments",
       "/admin/staff",
       "/admin/projectors",
+      "/admin/maintenance",
       "/admin/operating-hours",
       "/admin/audit-logs",
       "/admin/corrections",
