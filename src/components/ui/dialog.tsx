@@ -33,6 +33,13 @@ export function Dialog({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
+  }, [onClose, closeDisabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,8 +48,8 @@ export function Dialog({
     panelRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !closeDisabled) {
-        onClose();
+      if (event.key === "Escape" && !closeDisabledRef.current) {
+        onCloseRef.current();
       }
     };
 
@@ -55,7 +62,7 @@ export function Dialog({
       document.body.style.overflow = originalOverflow;
       previousFocusRef.current?.focus();
     };
-  }, [open, onClose, closeDisabled]);
+  }, [open]);
 
   if (!open) return null;
 

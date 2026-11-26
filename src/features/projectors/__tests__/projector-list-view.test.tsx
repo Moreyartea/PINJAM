@@ -5,12 +5,16 @@ import { ApiClientError } from "@/lib/api/errors";
 import { ProjectorListView } from "@/features/projectors/projector-list-view";
 
 const listProjectorsMock = vi.fn();
+const checkAvailabilityMock = vi.fn();
 
 vi.mock("@/services", () => ({
   isMockMode: true,
   services: {
     projector: {
       listProjectors: (...args: unknown[]) => listProjectorsMock(...args),
+    },
+    availability: {
+      checkAvailability: (...args: unknown[]) => checkAvailabilityMock(...args),
     },
   },
 }));
@@ -20,7 +24,8 @@ describe("ProjectorListView", () => {
     vi.clearAllMocks();
   });
 
-  it("renders projector units with separated physical status badges and no booking action", async () => {
+  it("renders projector units with separated physical status badges and checks date availability", async () => {
+    const user = userEvent.setup();
     listProjectorsMock.mockResolvedValueOnce({
       data: [
         {
@@ -48,6 +53,22 @@ describe("ProjectorListView", () => {
       },
     });
 
+    checkAvailabilityMock.mockResolvedValueOnce({
+      data: {
+        projector_id: "p2",
+        date: "2026-11-27",
+        is_bookable: true,
+        physical_status: "BORROWED",
+        operating_hours: {
+          opens_at: "08:00:00",
+          closes_at: "16:30:00",
+          early_pickup_allowed_at: "07:45:00",
+        },
+        message: "Booking besok bersyarat sampai unit kembali.",
+      },
+      meta: { request_id: "req_a" },
+    });
+
     render(<ProjectorListView />);
 
     expect(await screen.findByText("Epson EB-X500")).toBeInTheDocument();
@@ -55,7 +76,12 @@ describe("ProjectorListView", () => {
     expect(screen.getByText("Tersedia")).toBeInTheDocument();
     expect(screen.getByText("Dipinjam")).toBeInTheDocument();
     expect(screen.getByText(/Pemisahan Status Fisik & Ketersediaan Booking/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Booking/i })).not.toBeInTheDocument();
+
+    const checkButtons = screen.getAllByRole("button", { name: "Cek Ketersediaan" });
+    await user.click(checkButtons[1]!);
+
+    expect(await screen.findByText("Dapat Dibooking")).toBeInTheDocument();
+    expect(screen.getByText("Booking besok bersyarat sampai unit kembali.")).toBeInTheDocument();
   });
 
   it("filters projectors by physical_status when dropdown changes", async () => {

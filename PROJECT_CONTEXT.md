@@ -1,8 +1,8 @@
 # PROJECT CONTEXT — PINJAM
 
 **Terakhir Diperbarui:** 26 November 2026  
-**Sprint Terakhir:** Sprint FE-1 — Autentikasi dan Halaman Awal KOMTING  
-**Branch Frontend Aktif:** `feat/frontend-fe1-auth-komting` (dibuat dari `staging`)  
+**Sprint Terakhir:** Sprint FE-2 — Booking dan Peminjaman KOMTING  
+**Branch Frontend Aktif:** `feat/frontend-fe2-booking` (dibuat dari `staging` pasca merge FE-1 `#1`)  
 **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
 2. `API_CONTRACT_PINJAM.md` (v1.0.0)
@@ -31,6 +31,7 @@ Aturan domain inti dari PRD:
 - **Bahasa:** TypeScript `^5.8.3` (`strict: true`, `noUncheckedIndexedAccess: true`)
 - **Styling:** Tailwind CSS `^4.3.5` (`@tailwindcss/postcss`) + CSS Custom Properties (`src/styles/tokens.css`)
 - **Typography:** `Plus Jakarta Sans` (body), `Space Grotesk` (headings), `JetBrains Mono` (kode aset/booking/token) via `next/font/google`
+- **QR Rendering:** `qrcode` (`^1.5.x`, `@types/qrcode`) untuk merender SVG QR dari token opaque backend
 - **Lint & Format:** ESLint `^9.25.0` (`eslint-config-next/core-web-vitals`, `eslint-config-next/typescript`) & Prettier `^3.5.3`
 - **Testing:** Vitest `5.1.2`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`
 - **Runtime Toolchain:** Node.js `v24.14.0`, npm `11.21.1`
@@ -62,6 +63,11 @@ PINJAMv2/
     │   ├── application/status/page.tsx
     │   ├── forbidden/page.tsx
     │   ├── komting/
+    │   │   ├── bookings/
+    │   │   │   ├── [id]/page.tsx
+    │   │   │   ├── new/page.tsx
+    │   │   │   └── page.tsx
+    │   │   ├── loans/page.tsx
     │   │   ├── page.tsx
     │   │   └── projectors/page.tsx
     │   ├── login/page.tsx
@@ -86,6 +92,8 @@ PINJAMv2/
     │   │   └── komting-shell.tsx
     │   ├── providers/
     │   │   └── app-providers.tsx
+    │   ├── qr/
+    │   │   └── booking-qr-card.tsx
     │   └── ui/
     │       ├── badge.tsx
     │       ├── button.tsx
@@ -102,6 +110,14 @@ PINJAMv2/
     │   │   ├── __tests__/login-form.test.tsx
     │   │   ├── login-form.tsx
     │   │   └── verify-email-view.tsx
+    │   ├── bookings/
+    │   │   ├── __tests__/
+    │   │   │   ├── booking-detail-view.test.tsx
+    │   │   │   ├── booking-list-view.test.tsx
+    │   │   │   └── new-booking-form.test.tsx
+    │   │   ├── booking-detail-view.tsx
+    │   │   ├── booking-list-view.tsx
+    │   │   └── new-booking-form.tsx
     │   ├── komting/
     │   │   ├── __tests__/
     │   │   │   ├── application-status-view.test.tsx
@@ -109,6 +125,9 @@ PINJAMv2/
     │   │   ├── application-status-view.tsx
     │   │   ├── komting-dashboard-view.tsx
     │   │   └── register-application-form.tsx
+    │   ├── loans/
+    │   │   ├── __tests__/komting-loan-history-view.test.tsx
+    │   │   └── komting-loan-history-view.tsx
     │   └── projectors/
     │       ├── __tests__/projector-list-view.test.tsx
     │       └── projector-list-view.tsx
@@ -130,8 +149,10 @@ PINJAMv2/
     │   │   ├── date.ts
     │   │   └── idempotency.ts
     │   └── validation/
+    │       ├── __tests__/booking.test.ts
     │       ├── application.ts
-    │       └── auth.ts
+    │       ├── auth.ts
+    │       └── booking.ts
     ├── services/
     │   ├── api/
     │   │   └── api-services.ts
@@ -149,92 +170,88 @@ PINJAMv2/
 
 ## 4. Halaman & Route yang Telah Dibuat
 
-| Route | Halaman | Akses & Perilaku |
-|---|---|---|
-| `/` | Baseline FE-0 & Navigasi Awal | Menampilkan ringkasan design system, status adapter, dan tautan navigasi FE-1 |
-| `/login` | Login | Form email & password, validasi input, loading/error state aman, redirect sesuai role dari `/api/v1/me`, panel simulasi akun khusus `DEV MOCK` |
-| `/verify-email` | Verifikasi Email | Menangani status instruksi maupun verifikasi token melalui adapter auth (tanpa mengarang endpoint) |
-| `/register` | Pendaftaran Komting | Form identitas mahasiswa (`full_name`, `student_id`, `class_name`, `email`), upload foto identitas via `FormData` + preview lokal (`URL.createObjectURL`), persetujuan privasi, deteksi hasil `PENDING_REPLACEMENT_NOTICE` |
-| `/application/status` | Status Pengajuan Komting | Menampilkan status dari `/api/v1/komting/applications/me` (`PENDING_*`, `PENDING_REPLACEMENT_NOTICE`, `APPROVED`, `REJECTED` + alasan, `WITHDRAWN`), state login/empty/error |
-| `/komting` | Dashboard Awal Komting | Dilindungi `RoleGuard` (`KOMTING`) + `KomtingShell`; sapaan, identitas/kelas, status akun & assignment, ringkasan loan aktif, booking aktif, proyektor relevan, empty state |
-| `/komting/projectors` | Daftar Proyektor Komting | Dilindungi `RoleGuard` (`KOMTING`); daftar unit, filter `physical_status`, pagination, penjelasan pemisahan status fisik vs booking (belum ada aksi booking) |
-| `/forbidden` | 403 Akses Ditolak | Halaman fallback untuk role yang tidak diizinkan oleh `RoleGuard` |
+### Fondasi & Auth / Publik (FE-0 & FE-1)
+- `/` — Baseline FE-0 dan tautan navigasi cepat.
+- `/login` — Form login email & password, validasi, loading/error state aman, redirect per role dari `GET /api/v1/me`.
+- `/verify-email` — Status dan pemrosesan token verifikasi email melalui `AuthProviderAdapter`.
+- `/register` — Form pengajuan pendaftaran komting (`POST /api/v1/komting/applications` via `FormData` + preview foto lokal).
+- `/application/status` — Status pengajuan komting (`GET /api/v1/komting/applications/me`).
+- `/forbidden` — Halaman `403` untuk akses role tidak sesuai.
+
+### Halaman KOMTING (FE-1 & FE-2)
+- `/komting` — Dashboard komting (`RoleGuard` `KOMTING`, `KomtingShell`, ringkasan kelas/assignment, active booking/loan, tautan ke daftar proyektor & booking baru).
+- `/komting/projectors` — Daftar proyektor dengan filter `physical_status`, pengecekan ketersediaan berbasis tanggal (`GET /api/v1/availability`) untuk hari ini/besok, dan tautan pilih unit ke form booking.
+- `/komting/bookings/new` (**FE-2**) — Form booking proyektor untuk hari ini atau besok (`Asia/Jakarta`), pemilihan waktu fleksibel per menit, jam operasional dinamis dari backend, pengecekan availability, ringkasan booking, pencegahan double-submit, dan header `Idempotency-Key`.
+- `/komting/bookings` (**FE-2**) — Daftar booking komting dengan filter status (`CONFIRMED`, `FULFILLED`, `CANCELLED`, `EXPIRED`), pagination, jendela pickup, serta state loading/empty/error.
+- `/komting/bookings/[id]` (**FE-2**) — Detail booking, jendela & batas waktu pickup, komponen `BookingQrCard` yang merender token opaque dari `GET /api/v1/komting/bookings/{id}/qr`, dan dialog konfirmasi pembatalan (`POST /api/v1/komting/bookings/{id}/cancel`) untuk booking `CONFIRMED`.
+- `/komting/loans` (**FE-2**) — Riwayat peminjaman komting (`GET /api/v1/komting/loans`) dengan filter status (`ACTIVE`, `RETURNED`), pagination, waktu pickup, waktu kembali aktual, dan kondisi pengembalian.
 
 ---
 
-## 5. Auth Adapter, Session Management, & RoleGuard
+## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1 & FE-2)
 
-- **Provider-Agnostic Adapter (`src/lib/auth/provider-adapter.ts`):**
-  - Mendefinisikan interface `AuthProviderAdapter` (`getSession`, `signInWithPassword`, `verifyEmail`, `signOut`) dan `registerAuthProviderAdapter`.
-  - Menyimpan access token di memori (`setActiveAccessToken`) dan menghubungkan `setAccessTokenProvider` pada API client.
-  - Tidak menyimpan password dan tidak menyimpan role otoritatif di `localStorage`.
-- **Session Context (`src/lib/auth/auth-context.tsx`):**
-  - Mengelola state `loading`, `authenticated`, `unauthenticated`, dan `expired`.
-  - Selalu mengambil profil & role otoritatif melalui `GET /api/v1/me` (`services.me.getMe()`).
-  - Menangani `401 AUTH_REQUIRED` sebagai `expired` dan membersihkan token.
-- **RoleGuard (`src/components/auth/role-guard.tsx`) & Navigasi (`src/lib/auth/navigation.ts`):**
-  - Menahan redirect saat `status === "loading"` agar tidak terjadi redirect prematur.
-  - Mengarahkan pengguna yang belum login/expired ke `/login?next=<path>`.
-  - Memeriksa `allowedRoles` terhadap `user.role`; role tidak sesuai diarahkan ke `/forbidden` (KOMTING tidak dapat membuka rute STAFF/ADMIN, STAFF tidak dapat membuka rute ADMIN).
-  - Didokumentasikan secara eksplisit bahwa `RoleGuard` hanya proteksi UX frontend dan bukan pengganti otorisasi backend.
+- **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`).
+- **Perbaikan UX Dialog (`src/components/ui/dialog.tsx`):** Menyimpan `onClose` dan `closeDisabled` di ref agar `useEffect` focus dialog hanya berjalan saat `open` berubah (mencegah fokus tercuri saat mengetik alasan pembatalan di `ConfirmDialog`).
+- **Utilitas Waktu & Validasi Booking (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`):**
+  - Helper `getJakartaDateString`, `getJakartaTomorrowDateString`, `getJakartaCurrentTimeString`, `jakartaDateTimeToUtcIso`, dan `formatJakartaTimeOnly`.
+  - Validasi tanggal (hanya hari ini atau besok `Asia/Jakarta`), penolakan waktu lampau, pemilihan per menit, estimasi kembali pada hari yang sama setelah waktu mulai, serta batas jam operasional dari backend (bukan hardcode).
+- **Komponen QR (`src/components/qr/booking-qr-card.tsx`):** Merender SVG QR dari `qr_payload` opaque backend tanpa menyimpan di `localStorage`, menampilkan `booking_code` sebagai alternatif aksesibel, serta menegaskan QR scan bukan konfirmasi transaksi.
 
 ---
 
-## 6. Komponen, Hooks, & Validasi Baru (FE-1)
+## 6. Endpoint API, Struktur Request/Response, & Mock Service (FE-2)
 
-- `src/components/providers/app-providers.tsx` — Pembungkus client provider (`AuthProvider`) di `RootLayout`.
-- `src/components/layout/komting-shell.tsx` — Shell navigasi khusus Komting (`Dashboard`, `Daftar Proyektor`, `Status Pengajuan`, aksi `Keluar`).
-- `src/hooks/use-async-query.ts` — Hook async data fetching terpusat dengan state `data`, `loading`, `error`, dan `reload`.
-- `src/lib/validation/auth.ts` & `src/lib/validation/application.ts` — Validasi input form login dan pendaftaran komting (termasuk validasi tipe MIME `image/jpeg`, `image/png`, `image/webp` dan batas awal 5 MB).
-- Feature components di `src/features/auth/`, `src/features/komting/`, `src/features/projectors/`.
-
----
-
-## 7. Endpoint API, Service, & Mock Integration
-
-- **Endpoint API Contract yang Digunakan di FE-1:**
-  - `GET /api/v1/me` — Profil pengguna, role, status akun, dan `komting_assignment`.
-  - `POST /api/v1/komting/applications` (`multipart/form-data`) — Pengajuan pendaftaran/pergantian komting.
-  - `GET /api/v1/komting/applications/me` — Status pengajuan milik pengguna saat ini.
-  - `GET /api/v1/komting/dashboard` — Ringkasan dashboard komting (`KomtingDashboardSummary`).
-  - `GET /api/v1/projectors` — Daftar proyektor dengan filter `physical_status` dan pagination.
-- **Status Integrasi Backend:**
-  - Backend masih dikembangkan terpisah pada kolaborasi paralel; frontend berjalan menggunakan `mockServices` saat `NEXT_PUBLIC_USE_MOCK_API=true` di development (`src/services/mock/mock-fixtures.ts` & `src/services/mock/mock-services.ts`).
-  - Real HTTP client (`src/services/api/api-services.ts`) sudah terpasang untuk seluruh endpoint di atas, sedangkan `auth` menunggu registrasi provider final melalui `registerAuthProviderAdapter`.
-  - Data simulasi pada `mock-fixtures.ts` menggunakan domain `@simulasi.local` dan kode `SIM-*` serta diberi badge `SIMULASI DEV` di UI agar tidak tertukar dengan data produksi.
+- **Endpoint API Contract yang Digunakan di FE-2:**
+  - `GET /api/v1/operating-hours?date=YYYY-MM-DD` -> `ApiSingleResponse<OperatingHoursSnapshot>` (`opens_at`, `closes_at`, `early_pickup_allowed_at`).
+  - `GET /api/v1/availability?projector_id=...&date=YYYY-MM-DD` -> `ApiSingleResponse<AvailabilityResult>` (`is_bookable`, `physical_status`, `operating_hours`, `message`).
+  - `POST /api/v1/bookings` (Header `Idempotency-Key`) -> Request `{ projector_id, booking_date, start_time, estimated_return_at }`, Response `201` `ApiSingleResponse<Booking>`.
+  - `GET /api/v1/komting/bookings?status=...&page=1&page_size=10` -> `ApiListResponse<Booking>`.
+  - `GET /api/v1/komting/bookings/{booking_id}` -> `ApiSingleResponse<Booking>`.
+  - `GET /api/v1/komting/bookings/{booking_id}/qr` -> `ApiSingleResponse<{ qr_payload, expires_at }>`.
+  - `POST /api/v1/komting/bookings/{booking_id}/cancel` -> Request `{ reason }`, Response `ApiSingleResponse<Booking>`.
+  - `GET /api/v1/komting/loans?status=...&page=1&page_size=10` -> `ApiListResponse<Loan>`.
+- **Mock Service FE-2 (`src/services/mock/mock-fixtures.ts` & `src/services/mock/mock-services.ts`):**
+  - Simulasi `checkAvailability` membedakan status fisik `BORROWED` hari ini (tidak bookable hari ini, namun tentatif bookable besok dengan pesan bersyarat pukul 00:00 WIB) dan `MAINTENANCE`/`INACTIVE` (tidak bookable).
+  - Simulasi `getOperatingHours` mengembalikan jam tutup bervariasi per tanggal (`17:00:00` hari ini, `16:30:00` besok) untuk memastikan UI tidak meng-hardcode jam tutup.
+  - Simulasi `createBooking` memvalidasi status akun/assignment aktif, batas 1 booking aktif, dan `Idempotency-Key` (retry payload sama mengembalikan hasil sama; payload berbeda melempar `409 IDEMPOTENCY_KEY_REUSED`).
+  - Simulasi `MOCK_SIMULATION_BOOKINGS`, `MOCK_SIMULATION_LOANS`, `getBookingQr`, dan `cancelKomtingBooking`.
+- **Status Integrasi Backend:** Backend masih paralel; frontend siap beralih ke HTTP client nyata di `src/services/api/api-services.ts` begitu endpoint backend dan auth provider siap.
 
 ---
 
-## 8. Hasil Pengujian Terakhir (FE-1)
+## 7. Hasil Pengujian Terakhir (FE-2)
 
-Seluruh perintah verifikasi dijalankan setelah edit kode terakhir dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** 6 file test, **21 test lulus**:
-  - `src/features/auth/__tests__/login-form.test.tsx` (5 tests)
-  - `src/features/komting/__tests__/register-application-form.test.tsx` (3 tests)
-  - `src/components/auth/__tests__/role-guard.test.tsx` (4 tests)
-  - `src/features/komting/__tests__/application-status-view.test.tsx` (3 tests)
-  - `src/features/projectors/__tests__/projector-list-view.test.tsx` (3 tests)
-  - `src/components/feedback/__tests__/feedback-states.test.tsx` (3 tests)
+Seluruh pemeriksaan dijalankan setelah perubahan kode terakhir dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **11 file test, 36 test lulus**:
+  - `src/lib/validation/__tests__/booking.test.ts` (5 tests: validasi hari ini/besok & menit fleksibel, penolakan tanggal luar rentang, penolakan waktu lampau, validasi estimasi kembali, jam operasional dinamis & guard jam belum tersedia)
+  - `src/features/bookings/__tests__/new-booking-form.test.tsx` (2 tests: cek availability saat ubah proyektor/tanggal & jam operasional backend, pencegahan double-submit + reuse `Idempotency-Key` saat retry identik + rotasi key saat edit)
+  - `src/features/bookings/__tests__/booking-list-view.test.tsx` (3 tests: loading/cards/jendela pickup, empty + filter status, error + retry)
+  - `src/features/bookings/__tests__/booking-detail-view.test.tsx` (2 tests: detail booking + QR opaque SVG, dialog pembatalan + validasi alasan + penolakan backend + refresh status)
+  - `src/features/loans/__tests__/komting-loan-history-view.test.tsx` (3 tests: render loan `ACTIVE`/`RETURNED` & kondisi kembali, empty + filter, error)
+  - `src/features/projectors/__tests__/projector-list-view.test.tsx` (3 tests: status fisik terpisah + cek ketersediaan tanggal, filter status, error)
+  - Serta seluruh 18 test FE-1 (`login-form`, `register-application-form`, `role-guard`, `application-status-view`, `feedback-states`) tetap lulus.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error maupun warning.
-- **`npm run format:check` (`prettier --check .`):** Lulus (`All matched files use Prettier code style!`).
-- **`npm run build` (`next build`):** Lulus, 10/10 static pages ter-build (`/`, `/_not-found`, `/application/status`, `/forbidden`, `/komting`, `/komting/projectors`, `/login`, `/register`, `/verify-email`).
+- **`npm run format:check` (`prettier --check .`):** Lulus.
+- **`npm run build` (`next build`):** Lulus (13 static routes + 1 dynamic route `/komting/bookings/[id]` ter-build).
 
 ---
 
-## 9. Open Decisions & Catatan Ketidaksesuaian Kontrak
+## 8. Open Decisions & Kendala Integrasi
 
-1. **Provider Autentikasi Final (Open Decision #1):** Supabase Auth atau provider lain belum ditetapkan, sehingga `apiServices.auth` memakai adapter interface (`registerAuthProviderAdapter`) dan belum mengikat ke SDK tertentu.
-2. **Field Password pada Form Pendaftaran Komting (Ketidaksesuaian yang Ditemukan):** Prompt FE-1 menyebut password pada pendaftaran, namun `API_CONTRACT_PINJAM.md` §6.1 (`POST /api/v1/komting/applications`) hanya mendefinisikan field `full_name`, `email`, `student_id`, `class_name`, dan `identity_photo` tanpa `password`. Mengikuti aturan tidak mengarang kontrak, form `/register` mengirim hanya 5 field kontrak dan mencatat pembuatan kredensial/password sebagai bagian dari Open Decision #1 & #2 (alur signup provider auth vs pengajuan komting).
-3. **Verifikasi Email (`/verify-email`):** `API_CONTRACT_PINJAM.md` belum mendefinisikan endpoint `/api/v1/auth/verify-email` karena bergantung pada mekanisme provider autentikasi. Halaman `/verify-email` didelegasikan ke `services.auth.verifyEmail` (adapter) dan belum memanggil endpoint HTTP kustom.
-4. **Open Decisions Lainnya:** Batas ukuran/MIME/retensi foto identitas di server, mekanisme respons & tenggat komting lama saat replacement, batas waktu pembatalan booking oleh komting, endpoint manajemen akun STAFF oleh ADMIN, serta allowlist field koreksi transaksi ADMIN.
+1. **Detail slot jadwal pada `GET /api/v1/availability`:** Kontrak saat ini mengembalikan `is_bookable`, `physical_status`, `operating_hours`, dan `message` (tanpa daftar slot jam terpakai pada tanggal tersebut). UI menampilkan informasi kontrak tersebut secara jujur; jika diperlukan tampilan daftar slot waktu yang sudah terbooking, perlu penambahan field pada `API_CONTRACT_PINJAM.md`.
+2. **Batas waktu pembatalan mandiri oleh Komting (Open Decision #4):** Kontrak tidak menetapkan batas menit sebelum pickup untuk self-cancel; frontend mengizinkan aksi pembatalan pada status `CONFIRMED` dan mengandalkan penolakan backend apabila melewati kebijakan.
+3. **Nama proyektor pada daftar booking & loan:** Model `Booking` dan `Loan` di `API_CONTRACT_PINJAM.md` hanya menyertakan `projector_id`. Frontend melakukan lookup ke `GET /api/v1/projectors` untuk menampilkan nama & kode aset bila tersedia, dengan fallback aman ke `projector_id`.
+4. **Open Decisions FE-1 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, dan endpoint manajemen STAFF.
 
 ---
 
-## 10. Backlog Sprint Berikutnya (FE-2 — Booking)
+## 9. Backlog Sprint Berikutnya (FE-3 — STAFF Operasional)
 
 Berdasarkan `FRONTEND_SPEC_PINJAM.md` §18:
-- Pengecekan ketersediaan unit berdasarkan tanggal melalui `GET /api/v1/availability`.
-- Form booking baru (`/komting/bookings/new`) dengan pemilihan tanggal hari ini/besok (`Asia/Jakarta`), pemilihan waktu per menit, validasi jam operasional dari backend, pencegahan double-submit, dan header `Idempotency-Key`.
-- Daftar booking Komting (`/komting/bookings`) dan detail booking (`/komting/bookings/[id]`) beserta tampilan QR opaque (`GET /api/v1/komting/bookings/{id}/qr`) dan pembatalan booking jika diizinkan.
-- Halaman riwayat peminjaman Komting (`/komting/loans`) dan profil/assignment (`/komting/profile`).
+- Dashboard operasional STAFF (`/staff` via `GET /api/v1/staff/dashboard`).
+- Daftar & detail booking operasional (`/staff/bookings`, `/staff/bookings/[id]`).
+- Pemindaian QR & validasi token (`/staff/scan` via `POST /api/v1/staff/qr/validate` dengan fallback token manual).
+- Konfirmasi pickup (`/staff/bookings/[id]` -> `POST /api/v1/staff/bookings/{id}/pickup` dengan `Idempotency-Key` dan catatan penerima Komting/Perwakilan).
+- Daftar loan (`/staff/loans`) & form pemeriksaan return + upload foto bukti wajib bila `DAMAGED`/`INCOMPLETE` (`/staff/loans/[id]/return`).
+- Manajemen maintenance unit (`/staff/maintenance`).

@@ -31,6 +31,9 @@ const FOUNDATION_NAV: NavItem[] = [
   { label: "Status Pengajuan", href: "/application/status" },
   { label: "Dashboard Komting", href: "/komting" },
   { label: "Daftar Proyektor", href: "/komting/projectors" },
+  { label: "Booking Baru", href: "/komting/bookings/new" },
+  { label: "Daftar Booking", href: "/komting/bookings" },
+  { label: "Riwayat Peminjaman", href: "/komting/loans" },
   { label: "Uji 403 Guard", href: "/forbidden" },
 ];
 

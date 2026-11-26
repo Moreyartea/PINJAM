@@ -52,9 +52,16 @@ export function KomtingDashboardView() {
                 DATA SIMULASI DEV
               </Badge>
             )}
+            {canBorrow && (
+              <Link href="/komting/bookings/new">
+                <Button variant="primary" size="sm">
+                  Buat Booking Baru
+                </Button>
+              </Link>
+            )}
             <Link href="/komting/projectors">
-              <Button variant="primary" size="sm">
-                Lihat Daftar Proyektor
+              <Button variant="outline" size="sm">
+                Daftar Proyektor
               </Button>
             </Link>
           </>
@@ -181,7 +188,7 @@ export function KomtingDashboardView() {
               </CardHeader>
               <CardContent>
                 {dashboard.active_booking ? (
-                  <div className="space-y-2.5 text-sm">
+                  <div className="space-y-3 text-sm">
                     <div className="flex justify-between items-center">
                       <span className="font-semibold text-[var(--color-muted)]">Kode Booking</span>
                       <span className="font-mono font-bold">
@@ -199,11 +206,31 @@ export function KomtingDashboardView() {
                         {formatLocalTime(dashboard.active_booking.start_time)}
                       </span>
                     </div>
+                    <div className="pt-1">
+                      <Link
+                        href={`/komting/bookings/${encodeURIComponent(
+                          dashboard.active_booking.id
+                        )}`}
+                      >
+                        <Button variant="primary" size="sm">
+                          Lihat Detail &amp; QR
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 ) : (
                   <EmptyState
                     title="Belum Ada Booking Aktif"
-                    description="Daftar dan pembuatan booking proyektor akan tersedia pada tahap FE-2."
+                    description="Ajukan booking baru untuk hari ini atau besok jika penugasan komting Anda aktif."
+                    action={
+                      canBorrow ? (
+                        <Link href="/komting/bookings/new">
+                          <Button variant="primary" size="sm">
+                            Buat Booking Baru
+                          </Button>
+                        </Link>
+                      ) : undefined
+                    }
                   />
                 )}
               </CardContent>
