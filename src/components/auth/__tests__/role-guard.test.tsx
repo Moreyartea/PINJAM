@@ -1,13 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiClientError } from "@/lib/api/errors";
 import { RoleGuard } from "@/components/auth/role-guard";
 import type { UserProfile } from "@/types/domain";
 
 const replaceMock = vi.fn();
+const refreshMeMock = vi.fn();
 let mockPathname = "/komting";
 let mockAuth: {
-  status: "loading" | "authenticated" | "unauthenticated" | "expired";
+  status: "loading" | "authenticated" | "unauthenticated" | "expired" | "error";
   user: UserProfile | null;
+  error?: ApiClientError | null;
 } = {
   status: "loading",
   user: null,
@@ -21,10 +24,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth/auth-context", () => ({
   useAuth: () => ({
     ...mockAuth,
-    error: null,
+    error: mockAuth.error ?? null,
     signIn: vi.fn(),
     signOut: vi.fn(),
-    refreshMe: vi.fn(),
+    refreshMe: refreshMeMock,
     clearError: vi.fn(),
   }),
 }));
@@ -641,5 +644,34 @@ describe("RoleGuard", () => {
     );
 
     expect(screen.getByText("Manajemen Akun Staff Admin")).toBeInTheDocument();
+  });
+
+  it("does not redirect when status is error and renders retry UI with refreshMe trigger", async () => {
+    mockAuth = {
+      status: "error",
+      user: null,
+      error: new ApiClientError({
+        status: 503,
+        code: "SERVICE_UNAVAILABLE",
+        message: "Gangguan koneksi backend (503)",
+      }),
+    };
+
+    render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Konten Rahasia Admin</div>
+      </RoleGuard>
+    );
+
+    expect(screen.getByText("Gagal Memuat Profil")).toBeInTheDocument();
+    expect(screen.getByText("Gangguan koneksi backend (503)")).toBeInTheDocument();
+    expect(screen.queryByText("Konten Rahasia Admin")).not.toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    const retryBtn = screen.getByRole("button", { name: /Coba Lagi/i });
+    await act(async () => {
+      retryBtn.click();
+    });
+    expect(refreshMeMock).toHaveBeenCalledTimes(1);
   });
 });

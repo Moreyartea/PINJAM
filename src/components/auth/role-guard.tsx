@@ -1,8 +1,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Alert } from "@/components/feedback/alert";
 import { LoadingState } from "@/components/feedback/loading-state";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 import { isRoleAllowed } from "@/lib/auth/navigation";
 import type { UserRole } from "@/types/domain";
@@ -24,14 +26,15 @@ export function RoleGuard({
 }: RoleGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { status, user } = useAuth();
+  const { status, user, error, refreshMe } = useAuth();
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const isAuthenticated = status === "authenticated" && user !== null;
   const isAuthorized = isAuthenticated && isRoleAllowed(user.role, allowedRoles);
 
   useEffect(() => {
-    // Never redirect while session bootstrap is still loading.
-    if (status === "loading") return;
+    // Never redirect while session bootstrap is still loading or in error state.
+    if (status === "loading" || status === "error") return;
 
     if (status === "unauthenticated" || status === "expired" || !user) {
       const nextParam = pathname ? `?next=${encodeURIComponent(pathname)}` : "";
@@ -53,6 +56,36 @@ export function RoleGuard({
             description="Memvalidasi sesi dan hak akses Anda."
             rows={2}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--color-bg)]">
+        <div className="w-full max-w-md space-y-4">
+          <Alert tone="danger" title="Gagal Memuat Profil">
+            {error?.message || "Layanan backend sedang tidak dapat diakses. Silakan coba kembali."}
+          </Alert>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="primary"
+              size="sm"
+              isLoading={isRetrying}
+              loadingText="Mencoba kembali..."
+              onClick={async () => {
+                setIsRetrying(true);
+                try {
+                  await refreshMe();
+                } finally {
+                  setIsRetrying(false);
+                }
+              }}
+            >
+              Coba Lagi
+            </Button>
+          </div>
         </div>
       </div>
     );
