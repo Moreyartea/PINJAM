@@ -70,8 +70,7 @@ describe("AdminShell & Role Navigation", () => {
 
     expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
     expect(screen.getByText("ADMIN")).toBeInTheDocument();
-    expect(screen.getByText("Parsial")).toBeInTheDocument();
-    expect(screen.getByText("Menunggu API")).toBeInTheDocument();
+    expect(screen.getAllByText("Parsial")).toHaveLength(2);
     expect(screen.getAllByText("Segera")).toHaveLength(1);
   });
 

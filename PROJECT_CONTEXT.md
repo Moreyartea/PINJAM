@@ -1,7 +1,7 @@
 # PROJECT CONTEXT — PINJAM
 
 - **Terakhir Diperbarui:** 26 November 2026
-- **Sprint Terakhir:** Sprint FE-4.9 — ADMIN User & Account Management
+- **Sprint Terakhir:** Sprint FE-4.10 — ADMIN Dashboard Enhancement
 - **Branch Frontend Aktif:** `feat/frontend-fe4-admin` (dibuat dari `staging` pasca merge FE-3 `1a9c2fe`)
 - **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
@@ -68,6 +68,7 @@ PINJAMv2/
     │   │   ├── audit-logs/
     │   │   │   ├── [id]/page.tsx
     │   │   │   └── page.tsx
+    │   │   ├── corrections/page.tsx
     │   │   ├── maintenance/page.tsx
     │   │   ├── operating-hours/page.tsx
     │   │   ├── projectors/
@@ -269,7 +270,11 @@ Seluruh halaman di bawah `/staff/*` dilindungi oleh `RoleGuard` dengan `allowedR
 
 ### Halaman ADMIN (FE-4.1, FE-4.2, & FE-4.3)
 Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedRoles={["ADMIN"]}` dan dibungkus `AdminShell`.
-- `/admin` (**FE-4.1**) — Dashboard ADMIN (`AdminDashboardView`): menggabungkan data dari `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications` secara defensif (menampilkan ringkasan booking hari ini, loan aktif, overdue, status unit maintenance, aktivitas operasional terbaru, serta jumlah & daftar pengajuan komting pending; gagal parsial menampilkan `"—"` dan alert error tanpa mengarang angka `0`).
+- `/admin` (**FE-4.1 & FE-4.10**) — Dashboard ADMIN (`AdminDashboardView`): menggabungkan data secara defensif dari `GET /api/v1/staff/dashboard`, `GET /api/v1/admin/komting/applications`, `GET /api/v1/projectors?page=1&page_size=100`, dan `GET /api/v1/admin/audit-logs?page=1&page_size=5`:
+  - Ringkasan inventaris proyektor (total proyektor, tersedia `AVAILABLE`, dipinjam `BORROWED`, dan `MAINTENANCE`); apabila daftar proyektor lebih dari satu halaman (`total_pages > 1`), angka tersedia/dipinjam tidak diperkirakan secara parsial melainkan menampilkan `"—"` (dengan fallback `maintenance_units_count` bila tersedia dari dashboard).
+  - Ringkasan operasional & pengajuan (aplikasi komting menunggu verifikasi beserta tautan periksa ke `/admin/applications/[id]`, booking hari ini, booking menunggu pickup, loan aktif, loan overdue, serta daftar unit maintenance & transaksi operasional).
+  - Aktivitas terbaru & jejak audit dari `/api/v1/admin/audit-logs` (`actor_user_id`, `actor_role`, `action`, `entity_type`/`entity_id`, timestamp `Asia/Jakarta WIB`, serta tautan detail `/admin/audit-logs/[id]`) bersama `recent_activities` dashboard.
+  - Gagal parsial menampilkan `"—"` dan alert error tanpa mengarang angka `0`; gagal seluruhnya menampilkan `ErrorState` dengan tombol `Coba Lagi`.
 - `/admin/applications` (**FE-4.2**) — Daftar pengajuan komting (`AdminApplicationsListView`) dengan filter status kontrak (`ALL`, `PENDING_VERIFICATION`, `PENDING_REVIEW`, `PENDING_REPLACEMENT_NOTICE`, `PENDING_EMAIL_VERIFICATION`, `APPROVED`, `REJECTED`, `WITHDRAWN`), pagination, indikator pengajuan baru vs pergantian (*replacement*), serta state loading/empty/error.
 - `/admin/applications/[id]` (**FE-4.2**) — Detail pengajuan komting (`AdminApplicationDetailView`): informasi pendaftar/kelas/status/catatan, panel khusus Dokumen Identitas (Privat) yang menjelaskan pratinjau foto belum tersedia karena menunggu mekanisme akses privat backend (tanpa URL publik), serta aksi berstatus-ketat untuk **Approve Pengajuan Baru** (`POST .../approve`), **Reject** dengan alasan wajib (`POST .../reject`), dan **Approve Replacement** atomik dengan `Idempotency-Key` (`POST .../approve-replacement`).
 - `/admin/projectors` (**FE-4.3**) — Daftar & pembuatan inventaris proyektor (`AdminProjectorsListView`) menggunakan `GET /api/v1/projectors` dan `POST /api/v1/admin/projectors`: pencarian client-side (`asset_code`, `name`, `brand`, `model`), filter `physical_status`, pagination, form tambah unit dengan konfirmasi, pemisahan tegas badge status fisik vs aktif/nonaktif inventaris, serta pencegahan double-submit.
@@ -284,7 +289,8 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
   - Mengimplementasikan endpoint resmi §6.8 (`POST /api/v1/admin/komting/assignments/{assignment_id}/deactivate`) dengan validasi ID assignment & alasan wajib (`validateDeactivateAssignmentForm`), dialog konfirmasi dampak (booking belum diambil dibatalkan, loan aktif tetap berjalan, perubahan tercatat di audit log), serta pencegahan double-submit.
   - Menegakkan aturan domain: 1 komting aktif per kelas dan per mahasiswa, pergantian komting wajib melalui verifikasi ADMIN atomik di `/admin/applications` (`approve-replacement`), dan tanpa aktivasi lokal.
 - `/admin/maintenance` (**FE-4.8**) — Pemantauan dan pengelolaan maintenance unit proyektor oleh ADMIN (`AdminMaintenanceView`) menggunakan endpoint bersama STAFF/ADMIN sesuai §3.4 & §11 (`GET /api/v1/staff/maintenance`, `GET /api/v1/projectors`, `POST /api/v1/staff/projectors/{projector_id}/maintenance`, dan `POST /api/v1/staff/maintenance/{maintenance_id}/complete`): menampilkan unit berstatus fisik `MAINTENANCE` beserta alasan/catatan aktif, filter status & pagination catatan maintenance, daftar unit `AVAILABLE` untuk ditandai maintenance, dialog konfirmasi wajib alasan/catatan penyelesaian, double-submit guard, dan penegakan aturan bahwa unit `MAINTENANCE` tidak dapat dibooking serta perubahan status fisik hanya dilakukan oleh backend.
-- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/assignments` (badge `Parsial`), `/admin/staff` (badge `Menunggu API`), `/admin/projectors`, `/admin/maintenance`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections` (badge `Segera`), serta `/staff`.
+- `/admin/corrections` (**FE-4.10**) — Halaman status kerangka kontrak koreksi transaksi (`POST /api/v1/admin/transactions/{transaction_id}/corrections`, §13.3) agar tautan navigasi berlabel `Segera` pada `AdminShell` tidak menghasilkan `404` sambil menunggu finalisasi daftar field resmi yang diizinkan (§20).
+- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/assignments` (badge `Parsial`), `/admin/staff` (badge `Parsial`), `/admin/projectors`, `/admin/maintenance`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections` (badge `Segera`), serta `/staff`.
 
 ---
 
@@ -335,16 +341,16 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-4.9)
+## 7. Hasil Pengujian Terakhir (FE-4.10)
 
-Seluruh pemeriksaan dijalankan setelah implementasi FE-4.9 dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **25 file test, 93 test lulus**:
-  - 2 test pada `src/features/admin/__tests__/admin-staff-management.test.tsx` (tampilan gap kontrak tanpa CRUD fiktif / tanpa aksi manajemen akun `ADMIN`, loading/error retry `/api/v1/me`, validasi `full_name`, konfirmasi dialog, error handling, serta double-submit guard pada `PATCH /api/v1/me`), serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `STAFF` & `KOMTING` dan izinkan `ADMIN` pada `/admin/staff`; total 14 tests di file tersebut).
-  - Seluruh test FE-1 s.d. FE-4.8 sebelumnya tetap lulus tanpa regresi.
+Seluruh pemeriksaan dijalankan setelah implementasi FE-4.10 dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **25 file test, 92 test lulus**:
+  - Pembaruan `src/features/admin/__tests__/admin-dashboard-view.test.tsx` (`5` test: loading state, ringkasan inventaris lengkap + operasional + audit log terbaru + tautan ADMIN/STAFF, empty state, proteksi kalkulasi parsial pada multi-halaman proyektor, serta gagal parsial/penuh tanpa angka `0` palsu + retry) dan `src/components/layout/__tests__/admin-shell.test.tsx` (rute lengkap sidebar, `2` badge `Parsial`, `1` badge `Segera`).
+  - Seluruh test FE-1 s.d. FE-4.9 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error.
-- **Prettier check khusus file FE-4.9 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
-- **`npm run build` (`next build`):** Lulus — menghasilkan 26 static pages dan 7 dynamic routes (termasuk `/admin/staff`).
+- **Prettier check khusus file FE-4.10 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
+- **`npm run build` (`next build`):** Lulus — menghasilkan 27 static pages dan 7 dynamic routes (termasuk `/admin/corrections`).
 
 ---
 
@@ -357,7 +363,7 @@ Seluruh pemeriksaan dijalankan setelah implementasi FE-4.9 dan lulus (exit code 
 2. **Endpoint manajemen akun STAFF & role pengguna belum tersedia di `API_CONTRACT_PINJAM.md` (`/admin/staff`):** Kontrak (v1.0.0) mengakui hak ADMIN mengelola akun STAFF (§3.2, §3.4) dan baru menyediakan `GET/PATCH /api/v1/me` untuk profil sendiri (§5.1–5.2), tetapi belum mendefinisikan endpoint daftar, pencarian/pagination, pembuatan manual, pembaruan akun STAFF lain, aktivasi/penonaktifan akun STAFF, maupun pengelolaan role pengguna. CRUD akun STAFF penuh menunggu finalisasi endpoint resmi di API Contract.
 2. **Mekanisme akses foto identitas privat (`/admin/applications/[id]`):** `API_CONTRACT_PINJAM.md` §6.3 & §17 belum mendefinisikan endpoint atau field URL bertanda tangan (*signed URL*) untuk foto identitas pendaftar. UI menampilkan informasi aman bahwa pratinjau dokumen menunggu mekanisme akses privat backend (tanpa URL publik atau fiktif).
 3. **Informasi komting aktif sebelumnya pada response detail replacement:** Kontrak §6.3–6.4 belum menetapkan field objek komting lama dalam `KomtingApplication`; UI membedakan alur replacement menggunakan `application_type` / `status` dan menampilkan data calon pengganti yang tersedia di kontrak.
-4. **Endpoint khusus dashboard ADMIN & daftar assignment komting belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; tabel daftar `/admin/assignments`, `/admin/staff` penuh, dan `/admin/corrections` masih menunggu kejelasan kontrak.
+4. **Endpoint khusus dashboard ADMIN & ringkasan agregat proyektor/assignment belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` mengombinasikan `GET /api/v1/staff/dashboard`, `GET /api/v1/admin/komting/applications`, `GET /api/v1/projectors`, dan `GET /api/v1/admin/audit-logs`; jika inventaris proyektor melebihi `100` unit (`total_pages > 1`), endpoint belum menyediakan agregat jumlah per `physical_status` sehingga angka tersedia/dipinjam tidak diperkirakan secara parsial. Tabel daftar `/admin/assignments`, CRUD `/admin/staff` penuh, dan form `/admin/corrections` masih menunggu finalisasi kontrak.
 5. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
 6. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
 7. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
@@ -367,6 +373,6 @@ Seluruh pemeriksaan dijalankan setelah implementasi FE-4.9 dan lulus (exit code 
 
 ---
 
-## 9. Backlog Sprint Berikutnya (FE-4.10+ — Modul ADMIN Lanjutan)
+## 9. Backlog Sprint Berikutnya (FE-5 / Finalisasi Kontrak)
 
-- Implementasi modul ADMIN yang masih menunggu finalisasi kontrak (`/admin/corrections`, daftar/detail `/admin/assignments`, serta CRUD `/admin/staff` penuh setelah endpoint resmi tersedia).
+- Hardening & integrasi backend bertahap, serta penyelesaian modul yang masih menunggu finalisasi kontrak (`/admin/corrections`, daftar/detail `/admin/assignments`, CRUD `/admin/staff` penuh, dan agregat statistik proyektor pada dashboard).
