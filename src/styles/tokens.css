@@ -1,0 +1,72 @@
+/**
+ * PINJAM Design System Tokens (Neubrutalism Baseline)
+ * Reference: FRONTEND_SPEC_PINJAM.md Section 4.2
+ */
+
+:root {
+  /* Core palette */
+  --color-bg: #f7f7f2;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #efefe8;
+  --color-ink: #171717;
+  --color-muted: #525252;
+
+  /* Semantic & accent colors */
+  --color-primary: #c8f169;
+  --color-primary-hover: #b8e64c;
+  --color-secondary: #b8d9ff;
+  --color-secondary-hover: #9bc8ff;
+  --color-accent: #ff8f70;
+  --color-accent-hover: #ff7752;
+  --color-warning: #ffd166;
+  --color-danger: #ff6b6b;
+  --color-danger-soft: #ffe3e3;
+  --color-success: #8bd3a8;
+  --color-success-soft: #e2f6ea;
+  --color-info-soft: #e4f0ff;
+  --color-warning-soft: #fff5d6;
+
+  /* Borders & hard offset shadows */
+  --border-width: 2px;
+  --border-width-strong: 3px;
+  --border-color: #171717;
+  --shadow-x: 4px;
+  --shadow-y: 4px;
+  --shadow-x-sm: 2px;
+  --shadow-y-sm: 2px;
+  --shadow-x-lg: 6px;
+  --shadow-y-lg: 6px;
+  --shadow-color: #171717;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Typography */
+  --font-sans: var(--font-plus-jakarta), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-plus-jakarta), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Focus ring */
+  --focus-ring-color: #171717;
+  --focus-ring-offset: 2px;
+
+  /* Z-index layers */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}
