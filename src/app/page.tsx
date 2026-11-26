@@ -25,6 +25,12 @@ import { isMockMode } from "@/services";
 
 const FOUNDATION_NAV: NavItem[] = [
   { label: "Fondasi FE-0", href: "/", badge: "AKTIF" },
+  { label: "Login", href: "/login" },
+  { label: "Daftar Komting", href: "/register" },
+  { label: "Verifikasi Email", href: "/verify-email" },
+  { label: "Status Pengajuan", href: "/application/status" },
+  { label: "Dashboard Komting", href: "/komting" },
+  { label: "Daftar Proyektor", href: "/komting/projectors" },
   { label: "Uji 403 Guard", href: "/forbidden" },
 ];
 

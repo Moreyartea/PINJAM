@@ -157,3 +157,18 @@ export interface AuditLogEntry {
   request_id: string;
   created_at: string;
 }
+
+export interface DashboardReminder {
+  id?: string;
+  message: string;
+  level?: "info" | "warning";
+}
+
+export interface KomtingDashboardSummary {
+  active_assignment: KomtingAssignmentSummary | null;
+  active_booking: Booking | null;
+  active_loan: Loan | null;
+  recent_bookings?: Booking[];
+  relevant_projectors?: Projector[];
+  reminders?: DashboardReminder[];
+}
