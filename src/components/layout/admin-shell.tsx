@@ -11,7 +11,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Pengajuan Komting", href: "/admin/applications" },
   { label: "Assignment Komting", href: "/admin/komting", badge: "Segera" },
   { label: "Akun STAFF", href: "/admin/staff", badge: "Segera" },
-  { label: "Inventaris Proyektor", href: "/admin/projectors", badge: "Segera" },
+  { label: "Inventaris Proyektor", href: "/admin/projectors" },
   { label: "Jam Operasional", href: "/admin/operating-hours", badge: "Segera" },
   { label: "Audit Log", href: "/admin/audit-logs", badge: "Segera" },
   { label: "Koreksi Transaksi", href: "/admin/corrections", badge: "Segera" },

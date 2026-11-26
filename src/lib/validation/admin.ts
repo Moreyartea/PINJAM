@@ -49,3 +49,36 @@ export function validateRejectApplicationForm(values: {
   }
   return errors;
 }
+
+export interface CreateProjectorValidationErrors {
+  assetCode?: string;
+  name?: string;
+}
+
+export function validateCreateProjectorForm(values: {
+  assetCode: string;
+  name: string;
+}): CreateProjectorValidationErrors {
+  const errors: CreateProjectorValidationErrors = {};
+  if (!values.assetCode.trim()) {
+    errors.assetCode = "Kode aset proyektor wajib diisi.";
+  }
+  if (!values.name.trim()) {
+    errors.name = "Nama proyektor wajib diisi.";
+  }
+  return errors;
+}
+
+export interface UpdateProjectorValidationErrors {
+  name?: string;
+}
+
+export function validateUpdateProjectorForm(values: {
+  name: string;
+}): UpdateProjectorValidationErrors {
+  const errors: UpdateProjectorValidationErrors = {};
+  if (!values.name.trim()) {
+    errors.name = "Nama proyektor wajib diisi.";
+  }
+  return errors;
+}

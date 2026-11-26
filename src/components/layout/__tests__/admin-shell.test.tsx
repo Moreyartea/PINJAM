@@ -69,7 +69,7 @@ describe("AdminShell & Role Navigation", () => {
 
     expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
     expect(screen.getByText("ADMIN")).toBeInTheDocument();
-    expect(screen.getAllByText("Segera")).toHaveLength(6);
+    expect(screen.getAllByText("Segera")).toHaveLength(5);
   });
 
   it("keeps StaffShell isolated without ADMIN routes", () => {

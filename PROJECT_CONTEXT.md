@@ -1,7 +1,7 @@
 # PROJECT CONTEXT — PINJAM
 
 - **Terakhir Diperbarui:** 26 November 2026
-- **Sprint Terakhir:** Sprint FE-4.2 — Komting Application Verification
+- **Sprint Terakhir:** Sprint FE-4.3 — ADMIN Projector Inventory Management
 - **Branch Frontend Aktif:** `feat/frontend-fe4-admin` (dibuat dari `staging` pasca merge FE-3 `1a9c2fe`)
 - **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
@@ -62,6 +62,9 @@ PINJAMv2/
     ├── app/
     │   ├── admin/
     │   │   ├── applications/
+    │   │   │   ├── [id]/page.tsx
+    │   │   │   └── page.tsx
+    │   │   ├── projectors/
     │   │   │   ├── [id]/page.tsx
     │   │   │   └── page.tsx
     │   │   └── page.tsx
@@ -129,10 +132,13 @@ PINJAMv2/
     │   ├── admin/
     │   │   ├── __tests__/
     │   │   │   ├── admin-applications.test.tsx
-    │   │   │   └── admin-dashboard-view.test.tsx
+    │   │   │   ├── admin-dashboard-view.test.tsx
+    │   │   │   └── admin-projectors.test.tsx
     │   │   ├── admin-application-detail-view.tsx
     │   │   ├── admin-applications-list-view.tsx
-    │   │   └── admin-dashboard-view.tsx
+    │   │   ├── admin-dashboard-view.tsx
+    │   │   ├── admin-projector-detail-view.tsx
+    │   │   └── admin-projectors-list-view.tsx
     │   ├── auth/
     │   │   ├── __tests__/login-form.test.tsx
     │   │   ├── login-form.tsx
@@ -243,19 +249,21 @@ Seluruh halaman di bawah `/staff/*` dilindungi oleh `RoleGuard` dengan `allowedR
 - `/staff/maintenance` — Manajemen maintenance proyektor (`StaffMaintenanceView`): daftar catatan maintenance & daftar unit proyektor (`AVAILABLE`, `BORROWED`, `MAINTENANCE`, `INACTIVE`), aksi menandai unit `AVAILABLE` ke `MAINTENANCE` dengan alasan wajib.
 - `/staff/maintenance/[id]` — Detail catatan maintenance (`StaffMaintenanceDetailView`) dan penyelesaian maintenance dengan `resolution_note` serta opsi `set_projector_available`.
 
-### Halaman ADMIN (FE-4.1 & FE-4.2)
+### Halaman ADMIN (FE-4.1, FE-4.2, & FE-4.3)
 Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedRoles={["ADMIN"]}` dan dibungkus `AdminShell`.
 - `/admin` (**FE-4.1**) — Dashboard ADMIN (`AdminDashboardView`): menggabungkan data dari `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications` secara defensif (menampilkan ringkasan booking hari ini, loan aktif, overdue, status unit maintenance, aktivitas operasional terbaru, serta jumlah & daftar pengajuan komting pending; gagal parsial menampilkan `"—"` dan alert error tanpa mengarang angka `0`).
 - `/admin/applications` (**FE-4.2**) — Daftar pengajuan komting (`AdminApplicationsListView`) dengan filter status kontrak (`ALL`, `PENDING_VERIFICATION`, `PENDING_REVIEW`, `PENDING_REPLACEMENT_NOTICE`, `PENDING_EMAIL_VERIFICATION`, `APPROVED`, `REJECTED`, `WITHDRAWN`), pagination, indikator pengajuan baru vs pergantian (*replacement*), serta state loading/empty/error.
 - `/admin/applications/[id]` (**FE-4.2**) — Detail pengajuan komting (`AdminApplicationDetailView`): informasi pendaftar/kelas/status/catatan, panel khusus Dokumen Identitas (Privat) yang menjelaskan pratinjau foto belum tersedia karena menunggu mekanisme akses privat backend (tanpa URL publik), serta aksi berstatus-ketat untuk **Approve Pengajuan Baru** (`POST .../approve`), **Reject** dengan alasan wajib (`POST .../reject`), dan **Approve Replacement** atomik dengan `Idempotency-Key` (`POST .../approve-replacement`).
-- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/komting`, `/admin/staff`, `/admin/projectors`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
+- `/admin/projectors` (**FE-4.3**) — Daftar & pembuatan inventaris proyektor (`AdminProjectorsListView`) menggunakan `GET /api/v1/projectors` dan `POST /api/v1/admin/projectors`: pencarian client-side (`asset_code`, `name`, `brand`, `model`), filter `physical_status`, pagination, form tambah unit dengan konfirmasi, pemisahan tegas badge status fisik vs aktif/nonaktif inventaris, serta pencegahan double-submit.
+- `/admin/projectors/[id]` (**FE-4.3**) — Detail, edit metadata, & penonaktifan unit (`AdminProjectorDetailView`) menggunakan `GET /api/v1/projectors/{id}`, `PATCH /api/v1/admin/projectors/{id}` (kode aset `disabled` tidak dapat diedit; status fisik tidak diubah lewat form metadata), dan `POST /api/v1/admin/projectors/{id}/deactivate` (dialog konfirmasi dampak, penanganan konflik `PROJECTOR_HAS_ACTIVE_LOAN`, tanpa mengubah status fisik ke `MAINTENANCE`/`AVAILABLE`).
+- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/projectors`, tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/komting`, `/admin/staff`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
 
 ---
 
 ## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1, FE-2, FE-3, & FE-4)
 
 - **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`), `StaffShell` (`src/components/layout/staff-shell.tsx` dengan navigasi `/staff`, `/staff/scan`, `/staff/bookings`, `/staff/loans`, `/staff/maintenance`), serta `AdminShell` (`src/components/layout/admin-shell.tsx`).
-- **Validasi ADMIN (`src/lib/validation/admin.ts`):** `isReplacementApplication`, `canApproveNewApplication`, `canApproveReplacementApplication`, `canRejectApplication`, dan `validateRejectApplicationForm`.
+- **Validasi ADMIN (`src/lib/validation/admin.ts`):** `isReplacementApplication`, `canApproveNewApplication`, `canApproveReplacementApplication`, `canRejectApplication`, `validateRejectApplicationForm`, `validateCreateProjectorForm`, dan `validateUpdateProjectorForm`.
 - **Perbaikan UX Dialog (`src/components/ui/dialog.tsx`):** Menyimpan `onClose` dan `closeDisabled` di ref agar `useEffect` focus dialog hanya berjalan saat `open` berubah (mencegah fokus tercuri saat mengetik alasan pembatalan di `ConfirmDialog`).
 - **Utilitas Waktu & Validasi (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`, `src/lib/validation/staff.ts`):**
   - Helper `getJakartaDateString`, `getJakartaTomorrowDateString`, `getJakartaCurrentTimeString`, `jakartaDateTimeToUtcIso`, dan `formatJakartaTimeOnly`.
@@ -296,16 +304,16 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-4.2)
+## 7. Hasil Pengujian Terakhir (FE-4.3)
 
-Seluruh pemeriksaan dijalankan setelah implementasi FE-4.2 dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **19 file test, 66 test lulus**:
-  - 6 test baru pada `src/features/admin/__tests__/admin-applications.test.tsx` (daftar + indikator replacement vs baru + filter status + pagination, empty & error + retry, detail + notice foto privat + approve + pencegahan double-submit, reject dengan alasan wajib + error handling, replacement approval + peringatan + reuse `Idempotency-Key`, dan blokir aksi saat email belum diverifikasi) serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `STAFF` pada `/admin/applications`; total 7 tests di file tersebut).
-  - Seluruh test FE-1, FE-2, FE-3, dan FE-4.1 sebelumnya tetap lulus tanpa regresi.
+Seluruh pemeriksaan dijalankan setelah implementasi FE-4.3 dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **20 file test, 71 test lulus**:
+  - 4 test baru pada `src/features/admin/__tests__/admin-projectors.test.tsx` (daftar inventaris + pemisahan badge + search + filter + pagination, tambah unit + validasi wajib + kode aset duplikat + double-submit guard, detail + disable `asset_code` + edit metadata + double-submit guard, dan deactivate + konflik loan aktif) serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `KOMTING` dan izinkan `ADMIN` pada `/admin/projectors`; total 8 tests di file tersebut).
+  - Seluruh test FE-1, FE-2, FE-3, FE-4.1, dan FE-4.2 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error.
-- **Prettier check khusus file FE-4.2 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
-- **`npm run build` (`next build`):** Lulus — menghasilkan 20 static pages dan 5 dynamic routes (termasuk `/admin/applications` dan `/admin/applications/[id]`).
+- **Prettier check khusus file FE-4.3 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
+- **`npm run build` (`next build`):** Lulus — menghasilkan 21 static pages dan 6 dynamic routes (termasuk `/admin/projectors` dan `/admin/projectors/[id]`).
 
 ---
 

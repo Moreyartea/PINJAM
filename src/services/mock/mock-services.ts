@@ -596,41 +596,120 @@ export const mockServices: ServiceRegistry = {
 
     async createProjector(payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: "sim_prj_new",
-        asset_code: payload.asset_code,
-        name: payload.name,
-        brand: payload.brand ?? null,
-        model: payload.model ?? null,
+      requireAdminMock();
+
+      const assetCode = payload.asset_code.trim();
+      const name = payload.name.trim();
+      if (!assetCode || !name) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_INSPECTION_REQUIRED",
+          message: "Kode aset dan nama proyektor wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const duplicate = mockProjectorsStore.some(
+        (unit) => unit.asset_code.trim().toLowerCase() === assetCode.toLowerCase()
+      );
+      if (duplicate) {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_CONFLICT",
+          message: `Kode aset ${assetCode} sudah terdaftar pada inventaris.`,
+          details: [
+            {
+              field: "asset_code",
+              reason: `Kode aset ${assetCode} sudah digunakan.`,
+            },
+          ],
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const created: Projector = {
+        id: `sim_prj_${Date.now().toString(36)}`,
+        asset_code: assetCode,
+        name,
+        brand: payload.brand?.trim() || null,
+        model: payload.model?.trim() || null,
         physical_status: "AVAILABLE",
         is_active: true,
-      });
+      };
+      mockProjectorsStore.unshift(created);
+      return wrapMockSingle(created);
     },
 
     async updateProjector(projectorId, payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: projectorId,
-        asset_code: "SIM-PRJ-UPD",
-        name: payload.name ?? "Updated Simulator Projector",
-        brand: payload.brand ?? null,
-        model: payload.model ?? null,
-        physical_status: "AVAILABLE",
-        is_active: true,
-      });
+      requireAdminMock();
+
+      const index = mockProjectorsStore.findIndex((unit) => unit.id === projectorId);
+      const target = index >= 0 ? mockProjectorsStore[index] : undefined;
+      if (!target) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const nextName = payload.name !== undefined ? payload.name.trim() : target.name;
+      if (!nextName) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_INSPECTION_REQUIRED",
+          message: "Nama proyektor wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const updated: Projector = {
+        ...target,
+        name: nextName,
+        brand: payload.brand !== undefined ? payload.brand?.trim() || null : target.brand,
+        model: payload.model !== undefined ? payload.model?.trim() || null : target.model,
+      };
+      mockProjectorsStore[index] = updated;
+      return wrapMockSingle(updated);
     },
 
     async deactivateProjector(projectorId) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: projectorId,
-        asset_code: "SIM-PRJ-DEC",
-        name: "Deactivated Simulator Projector",
-        brand: null,
-        model: null,
+      requireAdminMock();
+
+      const index = mockProjectorsStore.findIndex((unit) => unit.id === projectorId);
+      const target = index >= 0 ? mockProjectorsStore[index] : undefined;
+      if (!target) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const hasActiveLoan =
+        target.physical_status === "BORROWED" ||
+        mockLoansStore.some(
+          (loan) => loan.projector_id === projectorId && loan.status === "ACTIVE"
+        );
+      if (hasActiveLoan) {
+        throw new ApiClientError({
+          status: 409,
+          code: "PROJECTOR_HAS_ACTIVE_LOAN",
+          message:
+            "Unit tidak dapat dinonaktifkan karena sedang dipinjam atau memiliki loan aktif.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const deactivated: Projector = {
+        ...target,
         physical_status: "INACTIVE",
         is_active: false,
-      });
+      };
+      mockProjectorsStore[index] = deactivated;
+      return wrapMockSingle(deactivated);
     },
   },
 

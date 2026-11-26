@@ -219,4 +219,47 @@ describe("RoleGuard", () => {
     });
     expect(screen.queryByText("Daftar Pengajuan Admin")).not.toBeInTheDocument();
   });
+
+  it("blocks KOMTING and STAFF from /admin/projectors while allowing ADMIN", async () => {
+    mockPathname = "/admin/projectors";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "k1",
+        email: "komting@kampus.ac.id",
+        full_name: "Komting",
+        role: "KOMTING",
+        account_status: "ACTIVE",
+      },
+    };
+
+    const { rerender } = render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Inventaris Admin</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/forbidden");
+    });
+    expect(screen.queryByText("Inventaris Admin")).not.toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "a1",
+        email: "admin@kampus.ac.id",
+        full_name: "Admin",
+        role: "ADMIN",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Inventaris Admin</div>
+      </RoleGuard>
+    );
+
+    expect(screen.getByText("Inventaris Admin")).toBeInTheDocument();
+  });
 });
