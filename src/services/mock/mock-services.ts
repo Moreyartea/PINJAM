@@ -561,8 +561,25 @@ export const mockServices: ServiceRegistry = {
       return wrapMockSingle(result);
     },
 
-    async deactivateAssignment() {
+    async deactivateAssignment(assignmentId, payload) {
       await simulateMockRequest();
+      requireAdminMock();
+      if (!assignmentId.trim() || assignmentId.trim() === "not_found") {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Assignment komting ${assignmentId || "(kosong)"} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      if (!payload.reason.trim()) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_INSPECTION_REQUIRED",
+          message: "Alasan penonaktifan assignment wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
       return wrapMockSingle({ success: true });
     },
   },

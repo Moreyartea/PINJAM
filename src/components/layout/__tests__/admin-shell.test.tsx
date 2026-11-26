@@ -52,7 +52,7 @@ describe("AdminShell & Role Navigation", () => {
     const expectedRoutes = [
       "/admin",
       "/admin/applications",
-      "/admin/komting",
+      "/admin/assignments",
       "/admin/staff",
       "/admin/projectors",
       "/admin/operating-hours",
@@ -69,8 +69,9 @@ describe("AdminShell & Role Navigation", () => {
 
     expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
     expect(screen.getByText("ADMIN")).toBeInTheDocument();
+    expect(screen.getByText("Parsial")).toBeInTheDocument();
     expect(screen.getByText("Menunggu API")).toBeInTheDocument();
-    expect(screen.getAllByText("Segera")).toHaveLength(2);
+    expect(screen.getAllByText("Segera")).toHaveLength(1);
   });
 
   it("keeps StaffShell isolated without ADMIN routes", () => {

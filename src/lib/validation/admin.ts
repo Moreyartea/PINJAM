@@ -141,3 +141,24 @@ export function validateOperatingHoursForm(values: {
 
   return errors;
 }
+
+export interface DeactivateAssignmentValidationErrors {
+  assignmentId?: string;
+  reason?: string;
+}
+
+export function validateDeactivateAssignmentForm(values: {
+  assignmentId: string;
+  reason: string;
+}): DeactivateAssignmentValidationErrors {
+  const errors: DeactivateAssignmentValidationErrors = {};
+  if (!values.assignmentId.trim()) {
+    errors.assignmentId = "ID assignment komting wajib diisi.";
+  }
+  if (!values.reason.trim()) {
+    errors.reason = "Alasan penonaktifan wajib diisi.";
+  } else if (values.reason.trim().length < 5) {
+    errors.reason = "Alasan penonaktifan minimal 5 karakter.";
+  }
+  return errors;
+}

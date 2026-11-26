@@ -1,7 +1,7 @@
 # PROJECT CONTEXT — PINJAM
 
 - **Terakhir Diperbarui:** 26 November 2026
-- **Sprint Terakhir:** Sprint FE-4.6 — ADMIN Audit Logs
+- **Sprint Terakhir:** Sprint FE-4.7 — ADMIN Komting Assignment Management
 - **Branch Frontend Aktif:** `feat/frontend-fe4-admin` (dibuat dari `staging` pasca merge FE-3 `1a9c2fe`)
 - **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
@@ -64,6 +64,7 @@ PINJAMv2/
     │   │   ├── applications/
     │   │   │   ├── [id]/page.tsx
     │   │   │   └── page.tsx
+    │   │   ├── assignments/page.tsx
     │   │   ├── audit-logs/
     │   │   │   ├── [id]/page.tsx
     │   │   │   └── page.tsx
@@ -137,6 +138,7 @@ PINJAMv2/
     │   ├── admin/
     │   │   ├── __tests__/
     │   │   │   ├── admin-applications.test.tsx
+    │   │   │   ├── admin-assignments.test.tsx
     │   │   │   ├── admin-audit-logs.test.tsx
     │   │   │   ├── admin-dashboard-view.test.tsx
     │   │   │   ├── admin-operating-hours.test.tsx
@@ -144,6 +146,7 @@ PINJAMv2/
     │   │   │   └── admin-staff-management.test.tsx
     │   │   ├── admin-application-detail-view.tsx
     │   │   ├── admin-applications-list-view.tsx
+    │   │   ├── admin-assignments-view.tsx
     │   │   ├── admin-audit-log-detail-view.tsx
     │   │   ├── admin-audit-logs-list-view.tsx
     │   │   ├── admin-dashboard-view.tsx
@@ -271,14 +274,18 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
 - `/admin/staff` (**FE-4.4**) — Halaman manajemen akun STAFF (`AdminStaffManagementView`, dilindungi `RoleGuard allowedRoles={["ADMIN"]}` + `AdminShell`). Karena `API_CONTRACT_PINJAM.md` (v1.0.0) belum mendefinisikan endpoint daftar, pembuatan manual, pembaruan, maupun aktivasi/penonaktifan akun STAFF, halaman menampilkan pemberitahuan gap kontrak dan batasan keamanan secara jujur (tanpa endpoint fiktif, tanpa mock palsu, tanpa self-registration STAFF).
 - `/admin/operating-hours` (**FE-4.5**) — Konfigurasi jam operasional (`AdminOperatingHoursView`) menggunakan `GET /api/v1/operating-hours?date=YYYY-MM-DD` dan `PUT /api/v1/admin/operating-hours/{date}`: menampilkan snapshot aktif `Asia/Jakarta` (`opens_at`, `closes_at`, `early_pickup_allowed_at`, `configured_open_at`), informasi jam buka standar 08:00 / pickup 07:45 / pembukaan lebih awal dengan toleransi 30 menit, form perubahan jam buka/tutup/pembukaan awal & catatan, dialog konfirmasi berisi ringkasan perubahan, pencegahan double-submit, dan penanganan `409 OPERATING_HOURS_CONFLICT` beserta `details`.
 - `/admin/audit-logs` & `/admin/audit-logs/[id]` (**FE-4.6**) — Penelusuran catatan aktivitas immutable secara *read-only* (`AdminAuditLogsListView`, `AdminAuditLogDetailView`) menggunakan `GET /api/v1/admin/audit-logs` dan `GET /api/v1/admin/audit-logs/{audit_log_id}`: filter server sesuai kontrak (`entity_type`, `entity_id`), pencarian kata kunci lokal pada halaman yang dimuat, pagination (`page_size=20`), tampilan timestamp `Asia/Jakarta`, metadata aktor (`actor_user_id`, `actor_role`), `action`, `entity_type`/`entity_id`, `reason`, `request_id`, serta panel snapshot JSON `before_data` & `after_data` tanpa aksi ubah/hapus/koreksi.
-- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/projectors`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/staff` (badge `Menunggu API`), tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/komting`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
+- `/admin/assignments` (**FE-4.7**) — Manajemen assignment komting (`AdminAssignmentsView`) dilindungi `RoleGuard allowedRoles={["ADMIN"]}` + `AdminShell`:
+  - Karena `API_CONTRACT_PINJAM.md` (v1.0.0) belum menyediakan `GET /api/v1/admin/komting/assignments` maupun detail assignment, halaman menampilkan gap kontrak secara jujur (tidak memanggil daftar aplikasi sebagai penugasan aktif dan tidak membuat data penugasan palsu).
+  - Mengimplementasikan endpoint resmi §6.8 (`POST /api/v1/admin/komting/assignments/{assignment_id}/deactivate`) dengan validasi ID assignment & alasan wajib (`validateDeactivateAssignmentForm`), dialog konfirmasi dampak (booking belum diambil dibatalkan, loan aktif tetap berjalan, perubahan tercatat di audit log), serta pencegahan double-submit.
+  - Menegakkan aturan domain: 1 komting aktif per kelas dan per mahasiswa, pergantian komting wajib melalui verifikasi ADMIN atomik di `/admin/applications` (`approve-replacement`), dan tanpa aktivasi lokal.
+- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/assignments` (badge `Parsial`), `/admin/staff` (badge `Menunggu API`), `/admin/projectors`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections` (badge `Segera`), serta `/staff`.
 
 ---
 
 ## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1, FE-2, FE-3, & FE-4)
 
 - **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`), `StaffShell` (`src/components/layout/staff-shell.tsx` dengan navigasi `/staff`, `/staff/scan`, `/staff/bookings`, `/staff/loans`, `/staff/maintenance`), serta `AdminShell` (`src/components/layout/admin-shell.tsx`).
-- **Validasi ADMIN (`src/lib/validation/admin.ts`):** `isReplacementApplication`, `canApproveNewApplication`, `canApproveReplacementApplication`, `canRejectApplication`, `validateRejectApplicationForm`, `validateCreateProjectorForm`, `validateUpdateProjectorForm`, `normalizeApiTime`, dan `validateOperatingHoursForm`.
+- **Validasi ADMIN (`src/lib/validation/admin.ts`):** `isReplacementApplication`, `canApproveNewApplication`, `canApproveReplacementApplication`, `canRejectApplication`, `validateRejectApplicationForm`, `validateCreateProjectorForm`, `validateUpdateProjectorForm`, `normalizeApiTime`, `validateOperatingHoursForm`, dan `validateDeactivateAssignmentForm`.
 - **Perbaikan UX Dialog (`src/components/ui/dialog.tsx`):** Menyimpan `onClose` dan `closeDisabled` di ref agar `useEffect` focus dialog hanya berjalan saat `open` berubah (mencegah fokus tercuri saat mengetik alasan pembatalan di `ConfirmDialog`).
 - **Utilitas Waktu & Validasi (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`, `src/lib/validation/staff.ts`):**
   - Helper `getJakartaDateString`, `getJakartaTomorrowDateString`, `getJakartaCurrentTimeString`, `jakartaDateTimeToUtcIso`, dan `formatJakartaTimeOnly`.
@@ -316,31 +323,33 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
   - Simulasi `checkAvailability`, `getOperatingHours`, `createBooking`, `MOCK_SIMULATION_BOOKINGS`, `MOCK_SIMULATION_LOANS`, `getBookingQr`, dan `cancelKomtingBooking` untuk FE-2 (model `Booking` & `Loan` mengikuti kontrak §4.4 & §4.5 secara ketat).
   - Simulasi FE-3 dengan store stateful in-memory (`mockProjectorsStore`, `mockBookingsStore`, `mockLoansStore`, `mockMaintenanceStore`, `mockQrTokenStore`, `mockStaffIdempotencyStore`), guard `requireStaffOrAdminMock()`, `MOCK_SIMULATION_MAINTENANCE`, dan `MOCK_SIMULATION_QR_TOKENS` (`sim_qr_pickup_ready_01`, `sim_qr_return_active_01`), serta implementasi `listStaffBookings`, `getStaffBooking`, `listStaffLoans`, `getStaffLoan`, `confirmReturn`, `validateQr`, `confirmPickup`, `listMaintenance`, `createMaintenance`, `completeMaintenance`, dan `getStaffDashboard`.
   - Simulasi FE-4.6 (`auditLog`) dengan `MOCK_SIMULATION_AUDIT_LOGS` & `mockAuditLogsStore`, guard `requireAdminMock()`, dukungan filter `entity_type`/`entity_id`, skenario `empty`, pagination, dan `404` pada `getAuditLog` bila ID tidak ditemukan.
+  - Simulasi FE-4.7 (`application.deactivateAssignment`) dilengkapi guard `requireAdminMock()`, validasi `assignmentId` (mengembalikan `404` bila kosong/`not_found`), serta validasi wajib `reason` (`422`), tanpa membuat data daftar assignment palsu.
 - **Status Integrasi Backend:** Backend masih paralel; frontend siap beralih ke HTTP client nyata di `src/services/api/api-services.ts` begitu endpoint backend dan auth provider siap.
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-4.6)
+## 7. Hasil Pengujian Terakhir (FE-4.7)
 
-Seluruh pemeriksaan dijalankan setelah implementasi FE-4.6 dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **23 file test, 83 test lulus**:
-  - 5 test baru pada `src/features/admin/__tests__/admin-audit-logs.test.tsx` (loading/error retry, empty state, filter `entity_type`/`entity_id` & pagination, detail view dengan snapshot `before_data`/`after_data`, serta verifikasi tidak adanya kontrol edit/hapus/koreksi), pembaruan `src/components/layout/__tests__/admin-shell.test.tsx` (badge `Segera` tersisa 2), serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `STAFF` & `KOMTING` dan izinkan `ADMIN` pada `/admin/audit-logs`; total 11 tests di file tersebut).
-  - Seluruh test FE-1 s.d. FE-4.5 sebelumnya tetap lulus tanpa regresi.
+Seluruh pemeriksaan dijalankan setelah implementasi FE-4.7 dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **24 file test, 87 test lulus**:
+  - 3 test baru pada `src/features/admin/__tests__/admin-assignments.test.tsx` (tampilan gap kontrak tanpa mengambil daftar aplikasi sebagai penugasan & tanpa bypass replacement, validasi `assignmentId` & `reason`, dialog konfirmasi dampak, error handling, serta double-submit guard pada `deactivateAssignment`), pembaruan `src/components/layout/__tests__/admin-shell.test.tsx` (rute `/admin/assignments` + badge `Parsial` dan 1 badge `Segera`), serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `STAFF` & `KOMTING` dan izinkan `ADMIN` pada `/admin/assignments`; total 12 tests di file tersebut).
+  - Seluruh test FE-1 s.d. FE-4.6 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error.
-- **Prettier check khusus file FE-4.6 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
-- **`npm run build` (`next build`):** Lulus — menghasilkan 24 static pages dan 7 dynamic routes (termasuk `/admin/audit-logs` dan `/admin/audit-logs/[id]`).
+- **Prettier check khusus file FE-4.7 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
+- **`npm run build` (`next build`):** Lulus — menghasilkan 25 static pages dan 7 dynamic routes (termasuk `/admin/assignments`).
 
 ---
 
 ## 8. Open Decisions & Kendala Integrasi
 
-1. **Keterbatasan Filter & Identitas Aktor Audit Log (§13.1–13.2):** `GET /api/v1/admin/audit-logs` saat ini hanya mendefinisikan query parameter `entity_type`, `entity_id`, `page`, dan `page_size` — belum ada filter server untuk `actor_user_id`, `action`, atau rentang tanggal (`from`/`to`). Selain itu, skema `AuditLogEntry` hanya menyediakan `actor_user_id` dan `actor_role` tanpa `actor_name`/`actor_email`, sehingga UI menampilkan ID & peran aktor apa adanya serta menyediakan pencarian kata kunci lokal pada halaman yang dimuat.
+1. **Endpoint Daftar & Detail Komting Assignment Belum Tersedia di `API_CONTRACT_PINJAM.md` (`/admin/assignments`):** Kontrak (v1.0.0) menyediakan mutasi penonaktifan (§6.8 `POST /api/v1/admin/komting/assignments/{assignment_id}/deactivate`) dan verifikasi pengajuan/pergantian (§6.3–6.7), tetapi belum mendefinisikan `GET /api/v1/admin/komting/assignments` maupun `GET /api/v1/admin/komting/assignments/{assignment_id}` (termasuk filter kelas/status, pagination, tanggal mulai/berakhir, dan data mahasiswa/komting per penugasan). Daftar tabel assignment menunggu finalisasi endpoint backend.
+2. **Keterbatasan Filter & Identitas Aktor Audit Log (§13.1–13.2):** `GET /api/v1/admin/audit-logs` saat ini hanya mendefinisikan query parameter `entity_type`, `entity_id`, `page`, dan `page_size` — belum ada filter server untuk `actor_user_id`, `action`, atau rentang tanggal (`from`/`to`). Selain itu, skema `AuditLogEntry` hanya menyediakan `actor_user_id` dan `actor_role` tanpa `actor_name`/`actor_email`, sehingga UI menampilkan ID & peran aktor apa adanya serta menyediakan pencarian kata kunci lokal pada halaman yang dimuat.
 2. **Detail `admin_early_open_at` & `409 OPERATING_HOURS_CONFLICT` (§12.2, §23 #5):** Kontrak belum menstandardisasi aturan perhitungan otomatis `early_pickup_allowed_at` pada server untuk nilai `admin_early_open_at` sembarang maupun struktur JSON baku array konflik booking pada `error.details` (UI menampilkan array `details` bila tersedia).
 2. **Endpoint manajemen akun STAFF belum tersedia di `API_CONTRACT_PINJAM.md` (`/admin/staff`):** Kontrak (v1.0.0) mengakui hak ADMIN mengelola akun STAFF (§3.2, §3.4), tetapi belum mendefinisikan endpoint, payload, filter/pagination, field yang diizinkan diedit, maupun error code untuk daftar, pembuatan manual, pembaruan, atau penonaktifan akun STAFF. Fitur CRUD akun STAFF belum dapat diimplementasikan tanpa melanggar batasan kontrak; `/admin/staff` menampilkan status gap ini secara eksplisit.
 2. **Mekanisme akses foto identitas privat (`/admin/applications/[id]`):** `API_CONTRACT_PINJAM.md` §6.3 & §17 belum mendefinisikan endpoint atau field URL bertanda tangan (*signed URL*) untuk foto identitas pendaftar. UI menampilkan informasi aman bahwa pratinjau dokumen menunggu mekanisme akses privat backend (tanpa URL publik atau fiktif).
 3. **Informasi komting aktif sebelumnya pada response detail replacement:** Kontrak §6.3–6.4 belum menetapkan field objek komting lama dalam `KomtingApplication`; UI membedakan alur replacement menggunakan `application_type` / `status` dan menampilkan data calon pengganti yang tersedia di kontrak.
-4. **Endpoint khusus dashboard ADMIN & daftar assignment komting belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; halaman `/admin/komting` dan `/admin/corrections` masih menunggu kejelasan kontrak.
+4. **Endpoint khusus dashboard ADMIN & daftar assignment komting belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; tabel daftar `/admin/assignments`, `/admin/staff` penuh, dan `/admin/corrections` masih menunggu kejelasan kontrak.
 5. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
 6. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
 7. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
@@ -350,6 +359,6 @@ Seluruh pemeriksaan dijalankan setelah implementasi FE-4.6 dan lulus (exit code 
 
 ---
 
-## 9. Backlog Sprint Berikutnya (FE-4.7+ — Modul ADMIN Lanjutan)
+## 9. Backlog Sprint Berikutnya (FE-4.8+ — Modul ADMIN Lanjutan)
 
-- Implementasi modul ADMIN yang masih menunggu finalisasi kontrak (`/admin/komting`, `/admin/staff` penuh setelah endpoint tersedia, dan `/admin/corrections`).
+- Implementasi modul ADMIN yang masih menunggu finalisasi kontrak (`/admin/corrections`, daftar/detail `/admin/assignments` serta `/admin/staff` penuh setelah endpoint tersedia).
