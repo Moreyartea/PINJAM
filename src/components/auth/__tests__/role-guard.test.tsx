@@ -111,4 +111,64 @@ describe("RoleGuard", () => {
     expect(screen.getByText("Konten Komting")).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
   });
+
+  it("allows STAFF and ADMIN on operational routes while blocking STAFF from ADMIN routes", async () => {
+    mockPathname = "/staff";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "s1",
+        email: "staff@kampus.ac.id",
+        full_name: "Staff",
+        role: "STAFF",
+        account_status: "ACTIVE",
+      },
+    };
+
+    const { rerender } = render(
+      <RoleGuard allowedRoles={["STAFF", "ADMIN"]}>
+        <div>Operasional STAFF</div>
+      </RoleGuard>
+    );
+    expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "a1",
+        email: "admin@kampus.ac.id",
+        full_name: "Admin",
+        role: "ADMIN",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["STAFF", "ADMIN"]}>
+        <div>Operasional STAFF</div>
+      </RoleGuard>
+    );
+    expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
+
+    mockPathname = "/admin";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "s1",
+        email: "staff@kampus.ac.id",
+        full_name: "Staff",
+        role: "STAFF",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Admin Only</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/forbidden");
+    });
+    expect(screen.queryByText("Admin Only")).not.toBeInTheDocument();
+  });
 });

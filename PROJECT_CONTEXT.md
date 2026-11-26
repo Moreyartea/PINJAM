@@ -1,9 +1,9 @@
 # PROJECT CONTEXT — PINJAM
 
-**Terakhir Diperbarui:** 26 November 2026  
-**Sprint Terakhir:** Sprint FE-2 — Booking dan Peminjaman KOMTING  
-**Branch Frontend Aktif:** `feat/frontend-fe2-booking` (dibuat dari `staging` pasca merge FE-1 `#1`)  
-**Acuan Utama:**
+- **Terakhir Diperbarui:** 26 November 2026
+- **Sprint Terakhir:** Sprint FE-3 — STAFF Operations
+- **Branch Frontend Aktif:** `feat/frontend-fe3-staff-operations` (dibuat dari `staging` pasca merge FE-2 `776068a`)
+- **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
 2. `API_CONTRACT_PINJAM.md` (v1.0.0)
 3. `FRONTEND_SPEC_PINJAM.md` (v1.0.0)
@@ -72,6 +72,18 @@ PINJAMv2/
     │   │   └── projectors/page.tsx
     │   ├── login/page.tsx
     │   ├── register/page.tsx
+    │   ├── staff/
+    │   │   ├── bookings/
+    │   │   │   ├── [id]/page.tsx
+    │   │   │   └── page.tsx
+    │   │   ├── loans/
+    │   │   │   ├── [id]/return/page.tsx
+    │   │   │   └── page.tsx
+    │   │   ├── maintenance/
+    │   │   │   ├── [id]/page.tsx
+    │   │   │   └── page.tsx
+    │   │   ├── page.tsx
+    │   │   └── scan/page.tsx
     │   ├── verify-email/page.tsx
     │   ├── globals.css
     │   ├── layout.tsx
@@ -89,7 +101,8 @@ PINJAMv2/
     │   │   └── loading-state.tsx
     │   ├── layout/
     │   │   ├── app-shell.tsx
-    │   │   └── komting-shell.tsx
+    │   │   ├── komting-shell.tsx
+    │   │   └── staff-shell.tsx
     │   ├── providers/
     │   │   └── app-providers.tsx
     │   ├── qr/
@@ -128,9 +141,26 @@ PINJAMv2/
     │   ├── loans/
     │   │   ├── __tests__/komting-loan-history-view.test.tsx
     │   │   └── komting-loan-history-view.tsx
-    │   └── projectors/
-    │       ├── __tests__/projector-list-view.test.tsx
-    │       └── projector-list-view.tsx
+    │   ├── projectors/
+    │   │   ├── __tests__/projector-list-view.test.tsx
+    │   │   └── projector-list-view.tsx
+    │   └── staff/
+    │       ├── __tests__/
+    │       │   ├── staff-booking-operations.test.tsx
+    │       │   ├── staff-dashboard-view.test.tsx
+    │       │   ├── staff-maintenance-view.test.tsx
+    │       │   ├── staff-qr-scan-view.test.tsx
+    │       │   └── staff-return-inspection.test.tsx
+    │       ├── pickup-confirmation-panel.tsx
+    │       ├── return-inspection-form.tsx
+    │       ├── staff-booking-detail-view.tsx
+    │       ├── staff-booking-list-view.tsx
+    │       ├── staff-dashboard-view.tsx
+    │       ├── staff-loan-list-view.tsx
+    │       ├── staff-maintenance-detail-view.tsx
+    │       ├── staff-maintenance-view.tsx
+    │       ├── staff-qr-scan-view.tsx
+    │       └── staff-return-inspection-view.tsx
     ├── hooks/
     │   └── use-async-query.ts
     ├── lib/
@@ -152,7 +182,8 @@ PINJAMv2/
     │       ├── __tests__/booking.test.ts
     │       ├── application.ts
     │       ├── auth.ts
-    │       └── booking.ts
+    │       ├── booking.ts
+    │       └── staff.ts
     ├── services/
     │   ├── api/
     │   │   └── api-services.ts
@@ -186,20 +217,35 @@ PINJAMv2/
 - `/komting/bookings/[id]` (**FE-2**) — Detail booking, jendela & batas waktu pickup, komponen `BookingQrCard` yang merender token opaque dari `GET /api/v1/komting/bookings/{id}/qr`, dan dialog konfirmasi pembatalan (`POST /api/v1/komting/bookings/{id}/cancel`) untuk booking `CONFIRMED`.
 - `/komting/loans` (**FE-2**) — Riwayat peminjaman komting (`GET /api/v1/komting/loans`) dengan filter status (`ACTIVE`, `RETURNED`), pagination, waktu pickup, waktu kembali aktual, dan kondisi pengembalian.
 
+### Halaman STAFF Operasional (FE-3)
+Seluruh halaman di bawah `/staff/*` dilindungi oleh `RoleGuard` dengan `allowedRoles={["STAFF", "ADMIN"]}` dan dibungkus `StaffShell` (tanpa fitur admin/audit-log).
+- `/staff` — Dashboard operasional STAFF (`StaffDashboardView`, ringkasan jumlah booking hari ini, pending pickup, active loan, indikator overdue, unit maintenance, daftar antrean pickup, active loan, dan aktivitas terbaru).
+- `/staff/bookings` — Daftar booking operasional (`StaffBookingListView`) dengan filter status & tanggal, detail komting/kelas/proyektor, jadwal, jendela pickup, dan kode booking.
+- `/staff/bookings/[id]` — Detail booking operasional (`StaffBookingDetailView`) serta panel validasi QR & konfirmasi pickup (`PickupConfirmationPanel`).
+- `/staff/scan` — Pemindai & validasi QR (`StaffQrScanView`) menggunakan `BarcodeDetector` kamera opsional dan fallback input manual `qr_payload`, mendukung mode `PICKUP` (konfirmasi eksplisit `ConfirmDialog` + `Idempotency-Key`) maupun `RETURN` (langsung merender `ReturnInspectionForm` dalam state React tanpa menempatkan token QR di URL atau `localStorage`).
+- `/staff/loans` — Daftar transaksi peminjaman operasional (`StaffLoanListView`) dengan akses ke halaman inspeksi pengembalian.
+- `/staff/loans/[id]/return` — Halaman inspeksi pengembalian (`StaffReturnInspectionView` & `ReturnInspectionForm`) dengan pilihan kondisi `NORMAL`/`DAMAGED`, kelengkapan `COMPLETE`/`INCOMPLETE`, catatan, penerima/pengembali (`returned_by`), serta `evidence_photo` wajib dinamis saat `DAMAGED` atau `INCOMPLETE` (`FormData` + `Idempotency-Key`), tanpa perhitungan denda/sanksi otomatis.
+- `/staff/maintenance` — Manajemen maintenance proyektor (`StaffMaintenanceView`): daftar catatan maintenance & daftar unit proyektor (`AVAILABLE`, `BORROWED`, `MAINTENANCE`, `INACTIVE`), aksi menandai unit `AVAILABLE` ke `MAINTENANCE` dengan alasan wajib.
+- `/staff/maintenance/[id]` — Detail catatan maintenance (`StaffMaintenanceDetailView`) dan penyelesaian maintenance dengan `resolution_note` serta opsi `set_projector_available`.
+
 ---
 
-## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1 & FE-2)
+## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1, FE-2, & FE-3)
 
-- **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`).
+- **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`), serta `StaffShell` (`src/components/layout/staff-shell.tsx` dengan navigasi `/staff`, `/staff/scan`, `/staff/bookings`, `/staff/loans`, `/staff/maintenance`).
 - **Perbaikan UX Dialog (`src/components/ui/dialog.tsx`):** Menyimpan `onClose` dan `closeDisabled` di ref agar `useEffect` focus dialog hanya berjalan saat `open` berubah (mencegah fokus tercuri saat mengetik alasan pembatalan di `ConfirmDialog`).
-- **Utilitas Waktu & Validasi Booking (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`):**
+- **Utilitas Waktu & Validasi (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`, `src/lib/validation/staff.ts`):**
   - Helper `getJakartaDateString`, `getJakartaTomorrowDateString`, `getJakartaCurrentTimeString`, `jakartaDateTimeToUtcIso`, dan `formatJakartaTimeOnly`.
-  - Validasi tanggal (hanya hari ini atau besok `Asia/Jakarta`), penolakan waktu lampau, pemilihan per menit, estimasi kembali pada hari yang sama setelah waktu mulai, serta batas jam operasional dari backend (bukan hardcode).
-- **Komponen QR (`src/components/qr/booking-qr-card.tsx`):** Merender SVG QR dari `qr_payload` opaque backend tanpa menyimpan di `localStorage`, menampilkan `booking_code` sebagai alternatif aksesibel, serta menegaskan QR scan bukan konfirmasi transaksi.
+  - Validasi booking (`booking.ts`): hanya hari ini atau besok `Asia/Jakarta`, penolakan waktu lampau, pemilihan per menit, estimasi kembali pada hari yang sama setelah waktu mulai, serta batas jam operasional dari backend.
+  - Validasi operasional staff (`staff.ts`): `validatePickupForm` (wajib nama perwakilan bila `REPRESENTATIVE`), `isEvidencePhotoRequired` & `validateEvidencePhotoFile` (foto bukti wajib saat `DAMAGED` atau `INCOMPLETE`), `validateReturnInspectionForm`, `validateStartMaintenanceForm`, dan `validateCompleteMaintenanceForm`.
+- **Komponen QR & Operasional Staff:**
+  - `BookingQrCard` (`src/components/qr/booking-qr-card.tsx`): merender SVG QR dari `qr_payload` opaque backend tanpa menyimpan di `localStorage`, menampilkan `booking_code` sebagai alternatif aksesibel, serta menegaskan QR scan bukan konfirmasi transaksi.
+  - `PickupConfirmationPanel` (`src/features/staff/pickup-confirmation-panel.tsx`): menampilkan ringkasan validasi QR tanpa auto-konfirmasi, pemilihan penerima `KOMTING`/`REPRESENTATIVE`, serta dialog konfirmasi eksplisit dengan `Idempotency-Key`.
+  - `ReturnInspectionForm` (`src/features/staff/return-inspection-form.tsx`): inspeksi pengembalian via `FormData` + `Idempotency-Key` dengan prasyarat foto bukti dinamis dan penolakan sanksi/denda otomatis.
 
 ---
 
-## 6. Endpoint API, Struktur Request/Response, & Mock Service (FE-2)
+## 6. Endpoint API, Struktur Request/Response, & Mock Service (FE-2 & FE-3)
 
 - **Endpoint API Contract yang Digunakan di FE-2:**
   - `GET /api/v1/operating-hours?date=YYYY-MM-DD` -> `ApiSingleResponse<OperatingHoursSnapshot>` (`opens_at`, `closes_at`, `early_pickup_allowed_at`).
@@ -210,48 +256,53 @@ PINJAMv2/
   - `GET /api/v1/komting/bookings/{booking_id}/qr` -> `ApiSingleResponse<{ qr_payload, expires_at }>`.
   - `POST /api/v1/komting/bookings/{booking_id}/cancel` -> Request `{ reason }`, Response `ApiSingleResponse<Booking>`.
   - `GET /api/v1/komting/loans?status=...&page=1&page_size=10` -> `ApiListResponse<Loan>`.
-- **Mock Service FE-2 (`src/services/mock/mock-fixtures.ts` & `src/services/mock/mock-services.ts`):**
-  - Simulasi `checkAvailability` membedakan status fisik `BORROWED` hari ini (tidak bookable hari ini, namun tentatif bookable besok dengan pesan bersyarat pukul 00:00 WIB) dan `MAINTENANCE`/`INACTIVE` (tidak bookable).
-  - Simulasi `getOperatingHours` mengembalikan jam tutup bervariasi per tanggal (`17:00:00` hari ini, `16:30:00` besok) untuk memastikan UI tidak meng-hardcode jam tutup.
-  - Simulasi `createBooking` memvalidasi status akun/assignment aktif, batas 1 booking aktif, dan `Idempotency-Key` (retry payload sama mengembalikan hasil sama; payload berbeda melempar `409 IDEMPOTENCY_KEY_REUSED`).
-  - Simulasi `MOCK_SIMULATION_BOOKINGS`, `MOCK_SIMULATION_LOANS`, `getBookingQr`, dan `cancelKomtingBooking`.
+- **Endpoint API Contract yang Digunakan di FE-3:**
+  - `GET /api/v1/staff/dashboard` -> `ApiSingleResponse<StaffDashboardSummary>` (seluruh field opsional; UI merender `"—"` atau empty state bila field belum disediakan backend).
+  - `GET /api/v1/staff/bookings` & `GET /api/v1/staff/bookings/{booking_id}` -> Daftar & detail booking operasional (`Booking`), dipadukan lookup proyektor melalui `GET /api/v1/projectors` / `GET /api/v1/projectors/{projector_id}` dengan fallback `komting_id`/`projector_id`.
+  - `POST /api/v1/staff/qr/validate` -> Validasi token QR opaque (`QrValidationResponse` sesuai §9.2 tanpa `loan_id`); untuk `RETURN`, loan `ACTIVE` dicari melalui `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
+  - `POST /api/v1/staff/bookings/{booking_id}/pickup` (Header `Idempotency-Key`) -> Konfirmasi penyerahan (`KOMTING` / `REPRESENTATIVE` + nama perwakilan).
+  - `GET /api/v1/staff/loans` & `GET /api/v1/staff/loans/{loan_id}` -> Daftar & detail peminjaman operasional (`Loan`), dipadukan lookup proyektor melalui `GET /api/v1/projectors` / `GET /api/v1/projectors/{projector_id}` dengan fallback ID.
+  - `POST /api/v1/staff/loans/{loan_id}/return` (`FormData` + Header `Idempotency-Key`) -> Konfirmasi pengembalian & inspeksi kondisi/kelengkapan + `evidence_photo`.
+  - `GET /api/v1/staff/maintenance` -> Daftar catatan maintenance (termasuk pencarian berpaginasi pada `StaffMaintenanceDetailView`).
+  - `POST /api/v1/staff/projectors/{projector_id}/maintenance` -> Menandai unit `AVAILABLE` menjadi `MAINTENANCE`.
+  - `POST /api/v1/staff/maintenance/{maintenance_id}/complete` -> Menyelesaikan maintenance dengan `resolution_note` dan `set_projector_available`.
+- **Mock Service FE-2 & FE-3 (`src/services/mock/mock-fixtures.ts` & `src/services/mock/mock-services.ts`):**
+  - Simulasi `checkAvailability`, `getOperatingHours`, `createBooking`, `MOCK_SIMULATION_BOOKINGS`, `MOCK_SIMULATION_LOANS`, `getBookingQr`, dan `cancelKomtingBooking` untuk FE-2 (model `Booking` & `Loan` mengikuti kontrak §4.4 & §4.5 secara ketat).
+  - Simulasi FE-3 dengan store stateful in-memory (`mockProjectorsStore`, `mockBookingsStore`, `mockLoansStore`, `mockMaintenanceStore`, `mockQrTokenStore`, `mockStaffIdempotencyStore`), guard `requireStaffOrAdminMock()`, `MOCK_SIMULATION_MAINTENANCE`, dan `MOCK_SIMULATION_QR_TOKENS` (`sim_qr_pickup_ready_01`, `sim_qr_return_active_01`), serta implementasi `listStaffBookings`, `getStaffBooking`, `listStaffLoans`, `getStaffLoan`, `confirmReturn`, `validateQr`, `confirmPickup`, `listMaintenance`, `createMaintenance`, `completeMaintenance`, dan `getStaffDashboard`.
 - **Status Integrasi Backend:** Backend masih paralel; frontend siap beralih ke HTTP client nyata di `src/services/api/api-services.ts` begitu endpoint backend dan auth provider siap.
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-2)
+## 7. Hasil Pengujian Terakhir (FE-3)
 
-Seluruh pemeriksaan dijalankan setelah perubahan kode terakhir dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **11 file test, 36 test lulus**:
-  - `src/lib/validation/__tests__/booking.test.ts` (5 tests: validasi hari ini/besok & menit fleksibel, penolakan tanggal luar rentang, penolakan waktu lampau, validasi estimasi kembali, jam operasional dinamis & guard jam belum tersedia)
-  - `src/features/bookings/__tests__/new-booking-form.test.tsx` (2 tests: cek availability saat ubah proyektor/tanggal & jam operasional backend, pencegahan double-submit + reuse `Idempotency-Key` saat retry identik + rotasi key saat edit)
-  - `src/features/bookings/__tests__/booking-list-view.test.tsx` (3 tests: loading/cards/jendela pickup, empty + filter status, error + retry)
-  - `src/features/bookings/__tests__/booking-detail-view.test.tsx` (2 tests: detail booking + QR opaque SVG, dialog pembatalan + validasi alasan + penolakan backend + refresh status)
-  - `src/features/loans/__tests__/komting-loan-history-view.test.tsx` (3 tests: render loan `ACTIVE`/`RETURNED` & kondisi kembali, empty + filter, error)
-  - `src/features/projectors/__tests__/projector-list-view.test.tsx` (3 tests: status fisik terpisah + cek ketersediaan tanggal, filter status, error)
-  - Serta seluruh 18 test FE-1 (`login-form`, `register-application-form`, `role-guard`, `application-status-view`, `feedback-states`) tetap lulus.
+Seluruh pemeriksaan dijalankan setelah finalisasi kesesuaian API Contract FE-3 terakhir dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **16 file test, 50 test lulus**:
+  - 14 test FE-3:
+    - `src/features/staff/__tests__/staff-dashboard-view.test.tsx` (3 tests)
+    - `src/features/staff/__tests__/staff-booking-operations.test.tsx` (2 tests)
+    - `src/features/staff/__tests__/staff-qr-scan-view.test.tsx` (2 tests)
+    - `src/features/staff/__tests__/staff-return-inspection.test.tsx` (2 tests)
+    - `src/features/staff/__tests__/staff-maintenance-view.test.tsx` (4 tests, mencakup list + create/complete + detail pagination + not-found state)
+    - Tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (akses operasional STAFF/ADMIN dan blokir STAFF dari fitur ADMIN; total 5 tests di file tersebut).
+  - Seluruh 36 test FE-1 & FE-2 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
-- **`npm run lint` (`eslint .`):** Lulus tanpa error maupun warning.
-- **`npm run format:check` (`prettier --check .`):** Lulus.
-- **`npm run build` (`next build`):** Lulus (13 static routes + 1 dynamic route `/komting/bookings/[id]` ter-build).
+- **`npm run lint` (`eslint .`):** Lulus tanpa error.
+- **Prettier check khusus file FE-3:** Lulus (`All matched files use Prettier code style!`). *(Catatan: `npm run format:check` global tetap dipengaruhi perbedaan line ending CRLF/LF file FE-1/FE-2 di Windows apabila dijalankan lintas seluruh repo; file FE-1/FE-2 sengaja tidak disentuh).*
+- **`npm run build` (`next build`):** Lulus — menghasilkan total 18 route, termasuk seluruh route FE-1/FE-2 serta route FE-3 (`/staff`, `/staff/bookings`, `/staff/bookings/[id]`, `/staff/loans`, `/staff/loans/[id]/return`, `/staff/maintenance`, `/staff/maintenance/[id]`, `/staff/scan`).
 
 ---
 
 ## 8. Open Decisions & Kendala Integrasi
 
-1. **Detail slot jadwal pada `GET /api/v1/availability`:** Kontrak saat ini mengembalikan `is_bookable`, `physical_status`, `operating_hours`, dan `message` (tanpa daftar slot jam terpakai pada tanggal tersebut). UI menampilkan informasi kontrak tersebut secara jujur; jika diperlukan tampilan daftar slot waktu yang sudah terbooking, perlu penambahan field pada `API_CONTRACT_PINJAM.md`.
-2. **Batas waktu pembatalan mandiri oleh Komting (Open Decision #4):** Kontrak tidak menetapkan batas menit sebelum pickup untuk self-cancel; frontend mengizinkan aksi pembatalan pada status `CONFIRMED` dan mengandalkan penolakan backend apabila melewati kebijakan.
-3. **Nama proyektor pada daftar booking & loan:** Model `Booking` dan `Loan` di `API_CONTRACT_PINJAM.md` hanya menyertakan `projector_id`. Frontend melakukan lookup ke `GET /api/v1/projectors` untuk menampilkan nama & kode aset bila tersedia, dengan fallback aman ke `projector_id`.
-4. **Open Decisions FE-1 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, dan endpoint manajemen STAFF.
+1. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
+2. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
+3. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
+4. **Identitas komting, kelas, & kode booking pada model `Booking`/`Loan`:** Kontrak (§4.4, §4.5) hanya menyediakan `komting_id`, `projector_id`, dan `booking_id` (tanpa `komting_name`, `class_name`, `projector_name`, maupun `booking_code` pada `Loan`) serta belum menyediakan endpoint lookup komting untuk role `STAFF`. Frontend melakukan lookup proyektor via `/api/v1/projectors` / `/api/v1/projectors/{projector_id}` dan menampilkan fallback ID (`komting_id`, `booking_id`, `projector_id`) bila nama belum tersedia.
+5. **Skema respons `GET /api/v1/staff/dashboard`:** Kontrak (§7.4) belum menetapkan struktur JSON baku untuk ringkasan dashboard; `StaffDashboardSummary` memperlakukan seluruh ringkasan dan daftar secara opsional dengan fallback aman `"—"` serta empty/error retry state.
+6. **Open Decisions FE-1 & FE-2 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, batas waktu self-cancel komting, serta detail slot jadwal pada `GET /api/v1/availability`.
 
 ---
 
-## 9. Backlog Sprint Berikutnya (FE-3 — STAFF Operasional)
+## 9. Backlog Sprint Berikutnya (FE-4 — ADMIN)
 
-Berdasarkan `FRONTEND_SPEC_PINJAM.md` §18:
-- Dashboard operasional STAFF (`/staff` via `GET /api/v1/staff/dashboard`).
-- Daftar & detail booking operasional (`/staff/bookings`, `/staff/bookings/[id]`).
-- Pemindaian QR & validasi token (`/staff/scan` via `POST /api/v1/staff/qr/validate` dengan fallback token manual).
-- Konfirmasi pickup (`/staff/bookings/[id]` -> `POST /api/v1/staff/bookings/{id}/pickup` dengan `Idempotency-Key` dan catatan penerima Komting/Perwakilan).
-- Daftar loan (`/staff/loans`) & form pemeriksaan return + upload foto bukti wajib bila `DAMAGED`/`INCOMPLETE` (`/staff/loans/[id]/return`).
-- Manajemen maintenance unit (`/staff/maintenance`).
+- Implementasi modul dan operasional peran `ADMIN` sesuai spesifikasi pada `FRONTEND_SPEC_PINJAM.md` dan `API_CONTRACT_PINJAM.md` (menunggu tahap sprint FE-4 berikutnya).

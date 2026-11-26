@@ -3,6 +3,7 @@ import type {
   KomtingApplication,
   KomtingDashboardSummary,
   Loan,
+  MaintenanceRecord,
   Projector,
   UserProfile,
 } from "@/types/domain";
@@ -173,6 +174,36 @@ export const MOCK_SIMULATION_APPLICATIONS: Record<string, KomtingApplication> = 
 
 export const MOCK_SIMULATION_BOOKINGS: Booking[] = [
   {
+    id: "sim_booking_pickup_01",
+    booking_code: "SIM-BKG-20261126-002",
+    komting_id: "sim_user_komting_01",
+    projector_id: "sim_prj_01",
+    booking_date: "2026-11-26",
+    start_time: "19:30:00",
+    estimated_return_at: "2026-11-26T14:00:00Z",
+    status: "CONFIRMED",
+    pickup_window: {
+      opens_at: "2026-11-26T12:00:00Z",
+      closes_at: "2026-11-26T12:45:00Z",
+    },
+    created_at: "2026-11-26T08:00:00Z",
+  },
+  {
+    id: "sim_booking_return_01",
+    booking_code: "SIM-BKG-20261126-900",
+    komting_id: "sim_user_komting_01",
+    projector_id: "sim_prj_02",
+    booking_date: "2026-11-26",
+    start_time: "09:00:00",
+    estimated_return_at: "2026-11-26T05:00:00Z",
+    status: "FULFILLED",
+    pickup_window: {
+      opens_at: "2026-11-26T01:30:00Z",
+      closes_at: "2026-11-26T02:15:00Z",
+    },
+    created_at: "2026-11-25T10:00:00Z",
+  },
+  {
     id: "sim_booking_history_01",
     booking_code: "SIM-BKG-20261125-001",
     komting_id: "sim_user_komting_01",
@@ -191,6 +222,16 @@ export const MOCK_SIMULATION_BOOKINGS: Booking[] = [
 
 export const MOCK_SIMULATION_LOANS: Loan[] = [
   {
+    id: "sim_loan_active_01",
+    booking_id: "sim_booking_return_01",
+    projector_id: "sim_prj_02",
+    komting_id: "sim_user_komting_01",
+    status: "ACTIVE",
+    picked_up_at: "2026-11-26T02:00:00Z",
+    returned_at: null,
+    return_condition: null,
+  },
+  {
     id: "sim_loan_01",
     booking_id: "sim_booking_history_01",
     projector_id: "sim_prj_01",
@@ -201,6 +242,24 @@ export const MOCK_SIMULATION_LOANS: Loan[] = [
     return_condition: "NORMAL",
   },
 ];
+
+export const MOCK_SIMULATION_MAINTENANCE: MaintenanceRecord[] = [
+  {
+    id: "sim_maint_01",
+    projector_id: "sim_prj_03",
+    reason: "Lampu proyektor redup dan perlu pengecekan kipas (simulasi).",
+    note: "Menunggu penggantian komponen.",
+    status: "IN_PROGRESS",
+    started_at: "2026-11-25T09:00:00Z",
+    resolution_note: null,
+    completed_at: null,
+  },
+];
+
+export const MOCK_SIMULATION_QR_TOKENS: Record<string, { booking_id: string }> = {
+  sim_qr_pickup_ready_01: { booking_id: "sim_booking_pickup_01" },
+  sim_qr_return_active_01: { booking_id: "sim_booking_return_01" },
+};
 
 export function createMockKomtingDashboard(profile: UserProfile): KomtingDashboardSummary {
   return {
