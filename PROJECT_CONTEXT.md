@@ -1,8 +1,8 @@
 # PROJECT CONTEXT — PINJAM
 
 - **Terakhir Diperbarui:** 26 November 2026
-- **Sprint Terakhir:** Sprint FE-3 — STAFF Operations
-- **Branch Frontend Aktif:** `feat/frontend-fe3-staff-operations` (dibuat dari `staging` pasca merge FE-2 `776068a`)
+- **Sprint Terakhir:** Sprint FE-4.1 — ADMIN Shell & Dashboard
+- **Branch Frontend Aktif:** `feat/frontend-fe4-admin` (dibuat dari `staging` pasca merge FE-3 `1a9c2fe`)
 - **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
 2. `API_CONTRACT_PINJAM.md` (v1.0.0)
@@ -60,6 +60,8 @@ PINJAMv2/
 ├── vitest.setup.ts
 └── src/
     ├── app/
+    │   ├── admin/
+    │   │   └── page.tsx
     │   ├── application/status/page.tsx
     │   ├── forbidden/page.tsx
     │   ├── komting/
@@ -100,6 +102,8 @@ PINJAMv2/
     │   │   ├── error-state.tsx
     │   │   └── loading-state.tsx
     │   ├── layout/
+    │   │   ├── __tests__/admin-shell.test.tsx
+    │   │   ├── admin-shell.tsx
     │   │   ├── app-shell.tsx
     │   │   ├── komting-shell.tsx
     │   │   └── staff-shell.tsx
@@ -119,6 +123,9 @@ PINJAMv2/
     │       ├── spinner.tsx
     │       └── textarea.tsx
     ├── features/
+    │   ├── admin/
+    │   │   ├── __tests__/admin-dashboard-view.test.tsx
+    │   │   └── admin-dashboard-view.tsx
     │   ├── auth/
     │   │   ├── __tests__/login-form.test.tsx
     │   │   ├── login-form.tsx
@@ -228,11 +235,16 @@ Seluruh halaman di bawah `/staff/*` dilindungi oleh `RoleGuard` dengan `allowedR
 - `/staff/maintenance` — Manajemen maintenance proyektor (`StaffMaintenanceView`): daftar catatan maintenance & daftar unit proyektor (`AVAILABLE`, `BORROWED`, `MAINTENANCE`, `INACTIVE`), aksi menandai unit `AVAILABLE` ke `MAINTENANCE` dengan alasan wajib.
 - `/staff/maintenance/[id]` — Detail catatan maintenance (`StaffMaintenanceDetailView`) dan penyelesaian maintenance dengan `resolution_note` serta opsi `set_projector_available`.
 
+### Halaman ADMIN (FE-4.1)
+Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedRoles={["ADMIN"]}` dan dibungkus `AdminShell`.
+- `/admin` — Dashboard ADMIN (`AdminDashboardView`): menggabungkan data dari `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications` secara defensif (menampilkan ringkasan booking hari ini, loan aktif, overdue, status unit maintenance, aktivitas operasional terbaru, serta jumlah & daftar pengajuan komting pending; gagal parsial menampilkan `"—"` dan alert error tanpa mengarang angka `0`).
+- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menyediakan akses ke `/admin`, tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/applications`, `/admin/komting`, `/admin/staff`, `/admin/projectors`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
+
 ---
 
-## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1, FE-2, & FE-3)
+## 5. Fondasi Auth, RoleGuard, & Komponen Baru (FE-1, FE-2, FE-3, & FE-4.1)
 
-- **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`), serta `StaffShell` (`src/components/layout/staff-shell.tsx` dengan navigasi `/staff`, `/staff/scan`, `/staff/bookings`, `/staff/loans`, `/staff/maintenance`).
+- **Auth & Session (`src/lib/auth/`):** `AuthProviderAdapter`, `AuthProvider`/`useAuth`, `setAccessTokenProvider`, `RoleGuard` (`src/components/auth/role-guard.tsx`), `KomtingShell` (`src/components/layout/komting-shell.tsx` diperbarui dengan menu `Booking Baru`, `Daftar Booking`, `Riwayat Peminjaman`), `StaffShell` (`src/components/layout/staff-shell.tsx` dengan navigasi `/staff`, `/staff/scan`, `/staff/bookings`, `/staff/loans`, `/staff/maintenance`), serta `AdminShell` (`src/components/layout/admin-shell.tsx`).
 - **Perbaikan UX Dialog (`src/components/ui/dialog.tsx`):** Menyimpan `onClose` dan `closeDisabled` di ref agar `useEffect` focus dialog hanya berjalan saat `open` berubah (mencegah fokus tercuri saat mengetik alasan pembatalan di `ConfirmDialog`).
 - **Utilitas Waktu & Validasi (`src/lib/utils/date.ts`, `src/lib/validation/booking.ts`, `src/lib/validation/staff.ts`):**
   - Helper `getJakartaDateString`, `getJakartaTomorrowDateString`, `getJakartaCurrentTimeString`, `jakartaDateTimeToUtcIso`, dan `formatJakartaTimeOnly`.
@@ -273,36 +285,34 @@ Seluruh halaman di bawah `/staff/*` dilindungi oleh `RoleGuard` dengan `allowedR
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-3)
+## 7. Hasil Pengujian Terakhir (FE-4.1)
 
-Seluruh pemeriksaan dijalankan setelah finalisasi kesesuaian API Contract FE-3 terakhir dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **16 file test, 50 test lulus**:
-  - 14 test FE-3:
-    - `src/features/staff/__tests__/staff-dashboard-view.test.tsx` (3 tests)
-    - `src/features/staff/__tests__/staff-booking-operations.test.tsx` (2 tests)
-    - `src/features/staff/__tests__/staff-qr-scan-view.test.tsx` (2 tests)
-    - `src/features/staff/__tests__/staff-return-inspection.test.tsx` (2 tests)
-    - `src/features/staff/__tests__/staff-maintenance-view.test.tsx` (4 tests, mencakup list + create/complete + detail pagination + not-found state)
-    - Tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (akses operasional STAFF/ADMIN dan blokir STAFF dari fitur ADMIN; total 5 tests di file tersebut).
-  - Seluruh 36 test FE-1 & FE-2 sebelumnya tetap lulus tanpa regresi.
+Seluruh pemeriksaan dijalankan setelah implementasi FE-4.1 dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **18 file test, 59 test lulus**:
+  - 9 test baru FE-4.1:
+    - `src/features/admin/__tests__/admin-dashboard-view.test.tsx` (6 tests: loading, data lengkap + hitung pengajuan pending + link STAFF, empty state, partial missing fields tanpa `0`, error total + retry, error parsial pengajuan tanpa `0`)
+    - `src/components/layout/__tests__/admin-shell.test.tsx` (2 tests: navigasi ADMIN termasuk `/staff` & `Segera`, serta isolasi `StaffShell`)
+    - Tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (ADMIN dapat mengakses `/admin`; total 6 tests)
+  - Seluruh 50 test FE-1, FE-2, & FE-3 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error.
-- **Prettier check khusus file FE-3:** Lulus (`All matched files use Prettier code style!`). *(Catatan: `npm run format:check` global tetap dipengaruhi perbedaan line ending CRLF/LF file FE-1/FE-2 di Windows apabila dijalankan lintas seluruh repo; file FE-1/FE-2 sengaja tidak disentuh).*
-- **`npm run build` (`next build`):** Lulus — menghasilkan total 18 route, termasuk seluruh route FE-1/FE-2 serta route FE-3 (`/staff`, `/staff/bookings`, `/staff/bookings/[id]`, `/staff/loans`, `/staff/loans/[id]/return`, `/staff/maintenance`, `/staff/maintenance/[id]`, `/staff/scan`).
+- **Prettier check khusus file FE-4.1 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
+- **`npm run build` (`next build`):** Lulus — menghasilkan total 19 route (menambahkan `/admin` pada baseline 18 route FE-3).
 
 ---
 
 ## 8. Open Decisions & Kendala Integrasi
 
-1. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
-2. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
-3. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
-4. **Identitas komting, kelas, & kode booking pada model `Booking`/`Loan`:** Kontrak (§4.4, §4.5) hanya menyediakan `komting_id`, `projector_id`, dan `booking_id` (tanpa `komting_name`, `class_name`, `projector_name`, maupun `booking_code` pada `Loan`) serta belum menyediakan endpoint lookup komting untuk role `STAFF`. Frontend melakukan lookup proyektor via `/api/v1/projectors` / `/api/v1/projectors/{projector_id}` dan menampilkan fallback ID (`komting_id`, `booking_id`, `projector_id`) bila nama belum tersedia.
-5. **Skema respons `GET /api/v1/staff/dashboard`:** Kontrak (§7.4) belum menetapkan struktur JSON baku untuk ringkasan dashboard; `StaffDashboardSummary` memperlakukan seluruh ringkasan dan daftar secara opsional dengan fallback aman `"—"` serta empty/error retry state.
-6. **Open Decisions FE-1 & FE-2 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, batas waktu self-cancel komting, serta detail slot jadwal pada `GET /api/v1/availability`.
+1. **Endpoint khusus dashboard ADMIN & manajemen STAFF belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; halaman `/admin/staff`, `/admin/komting`, `/admin/corrections` masih menunggu kejelasan kontrak.
+2. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
+3. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
+4. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
+5. **Identitas komting, kelas, & kode booking pada model `Booking`/`Loan`:** Kontrak (§4.4, §4.5) hanya menyediakan `komting_id`, `projector_id`, dan `booking_id` (tanpa `komting_name`, `class_name`, `projector_name`, maupun `booking_code` pada `Loan`) serta belum menyediakan endpoint lookup komting untuk role `STAFF`. Frontend melakukan lookup proyektor via `/api/v1/projectors` / `/api/v1/projectors/{projector_id}` dan menampilkan fallback ID (`komting_id`, `booking_id`, `projector_id`) bila nama belum tersedia.
+6. **Skema respons `GET /api/v1/staff/dashboard`:** Kontrak (§7.4) belum menetapkan struktur JSON baku untuk ringkasan dashboard; `StaffDashboardSummary` memperlakukan seluruh ringkasan dan daftar secara opsional dengan fallback aman `"—"` serta empty/error retry state.
+7. **Open Decisions FE-1 & FE-2 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, batas waktu self-cancel komting, serta detail slot jadwal pada `GET /api/v1/availability`.
 
 ---
 
-## 9. Backlog Sprint Berikutnya (FE-4 — ADMIN)
+## 9. Backlog Sprint Berikutnya (FE-4.2+ — Modul ADMIN Lanjutan)
 
-- Implementasi modul dan operasional peran `ADMIN` sesuai spesifikasi pada `FRONTEND_SPEC_PINJAM.md` dan `API_CONTRACT_PINJAM.md` (menunggu tahap sprint FE-4 berikutnya).
+- Implementasi modul ADMIN lanjutan sesuai kesiapan kontrak: verifikasi pengajuan komting (`/admin/applications`, `/admin/applications/[id]`), inventaris proyektor (`/admin/projectors`), jam operasional (`/admin/operating-hours`), audit log (`/admin/audit-logs`), serta modul yang masih menunggu finalisasi kontrak (`/admin/komting`, `/admin/staff`, `/admin/corrections`).

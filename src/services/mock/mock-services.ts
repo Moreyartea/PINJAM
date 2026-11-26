@@ -80,6 +80,18 @@ function requireStaffOrAdminMock(): UserProfile {
   return profile;
 }
 
+function requireAdminMock(): UserProfile {
+  const profile = resolveCurrentMockProfile();
+  if (profile.role !== "ADMIN") {
+    throw new ApiClientError({
+      status: 403,
+      code: "FORBIDDEN",
+      requestId: createMockRequestId(),
+    });
+  }
+  return profile;
+}
+
 function getMockOperatingHoursForDate(date: string): OperatingHoursSnapshot {
   const tomorrow = getJakartaTomorrowDateString();
   return {
@@ -329,12 +341,37 @@ export const mockServices: ServiceRegistry = {
     },
 
     async listAdminApplications(params) {
-      await simulateMockRequest();
-      return wrapMockList(
-        Object.values(MOCK_SIMULATION_APPLICATIONS),
-        params?.page,
-        params?.page_size
-      );
+      const scenario = await simulateMockRequest();
+      requireAdminMock();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const baseItems = Object.values(MOCK_SIMULATION_APPLICATIONS);
+      const allItems = latestSubmittedMockApplication
+        ? [latestSubmittedMockApplication, ...baseItems]
+        : baseItems;
+      const filtered = params?.status
+        ? allItems.filter((item) => item.status === params.status)
+        : allItems;
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
 
     async getAdminApplication(applicationId) {

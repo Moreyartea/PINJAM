@@ -171,4 +171,27 @@ describe("RoleGuard", () => {
     });
     expect(screen.queryByText("Admin Only")).not.toBeInTheDocument();
   });
+
+  it("allows ADMIN to access /admin without redirecting", () => {
+    mockPathname = "/admin";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "a1",
+        email: "admin@kampus.ac.id",
+        full_name: "Admin",
+        role: "ADMIN",
+        account_status: "ACTIVE",
+      },
+    };
+
+    render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Dashboard Admin</div>
+      </RoleGuard>
+    );
+
+    expect(screen.getByText("Dashboard Admin")).toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
 });
