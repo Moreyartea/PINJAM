@@ -63,6 +63,7 @@ const mockQrTokenStore = new Map<string, { booking_id: string }>(
 );
 const mockIdempotencyStore = new Map<string, { payloadHash: string; booking: Booking }>();
 const mockStaffIdempotencyStore = new Map<string, { payloadHash: string; result: unknown }>();
+const mockOperatingHoursStore = new Map<string, OperatingHoursSnapshot>();
 
 function resolveMockQrDisplayContext(komtingId: string, projectorId: string) {
   const komtingProfile = Object.values(MOCK_SIMULATION_PROFILES).find((p) => p.id === komtingId);
@@ -99,6 +100,8 @@ function requireAdminMock(): UserProfile {
 }
 
 function getMockOperatingHoursForDate(date: string): OperatingHoursSnapshot {
+  const saved = mockOperatingHoursStore.get(date);
+  if (saved) return saved;
   const tomorrow = getJakartaTomorrowDateString();
   return {
     service_date: date,
@@ -108,6 +111,14 @@ function getMockOperatingHoursForDate(date: string): OperatingHoursSnapshot {
     configured_open_at: "08:00:00",
     early_pickup_allowed_at: "07:45:00",
   };
+}
+
+function addMinutesToTimeString(timeStr: string, deltaMinutes: number): string {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = Math.max(0, Math.min(23 * 60 + 59, (h ?? 0) * 60 + (m ?? 0) + deltaMinutes));
+  const nextH = String(Math.floor(total / 60)).padStart(2, "0");
+  const nextM = String(total % 60).padStart(2, "0");
+  return `${nextH}:${nextM}:00`;
 }
 
 function buildMockPickupWindow(date: string, startTime: string, earlyAllowed: string) {
@@ -1476,19 +1487,71 @@ export const mockServices: ServiceRegistry = {
 
   operatingHours: {
     async getOperatingHours(date) {
-      await simulateMockRequest();
+      const scenario = await simulateMockRequest();
+      if (scenario === "empty") {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Konfigurasi jam operasional untuk tanggal ${date} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
       return wrapMockSingle(getMockOperatingHoursForDate(date));
     },
     async updateOperatingHours(date, payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
+      requireAdminMock();
+
+      if (payload.closes_at <= payload.opens_at) {
+        throw new ApiClientError({
+          status: 422,
+          code: "BOOKING_TIME_INVALID",
+          message: "Jam tutup harus lebih akhir dari jam buka.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const openUtc = new Date(`${date}T${payload.opens_at}+07:00`);
+      const closeUtc = new Date(`${date}T${payload.closes_at}+07:00`);
+      const conflicts = mockBookingsStore.filter((booking) => {
+        if (booking.booking_date !== date || booking.status !== "CONFIRMED") return false;
+        const startUtc = new Date(`${booking.booking_date}T${booking.start_time}+07:00`);
+        const endUtc = new Date(booking.estimated_return_at);
+        return startUtc < openUtc || endUtc > closeUtc;
+      });
+
+      if (conflicts.length > 0) {
+        throw new ApiClientError({
+          status: 409,
+          code: "OPERATING_HOURS_CONFLICT",
+          message: "Perubahan jam operasional bertabrakan dengan booking aktif.",
+          details: conflicts.map((b) => ({
+            field: b.booking_code,
+            reason: `Jadwal ${b.start_time.slice(0, 5)}–${new Intl.DateTimeFormat("en-GB", {
+              timeZone: "Asia/Jakarta",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }).format(new Date(b.estimated_return_at))} WIB berada di luar jam layanan baru.`,
+          })),
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const earlyAllowed = payload.admin_early_open_at
+        ? addMinutesToTimeString(payload.admin_early_open_at, 30)
+        : addMinutesToTimeString(payload.opens_at, -15);
+
+      const saved: OperatingHoursSnapshot = {
         service_date: date,
         timezone: "Asia/Jakarta",
         opens_at: payload.opens_at,
         closes_at: payload.closes_at,
         configured_open_at: payload.opens_at,
-        early_pickup_allowed_at: payload.admin_early_open_at ?? "07:45:00",
-      });
+        early_pickup_allowed_at: earlyAllowed,
+      };
+      mockOperatingHoursStore.set(date, saved);
+      return wrapMockSingle(saved);
     },
   },
 

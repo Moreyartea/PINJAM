@@ -326,4 +326,68 @@ describe("RoleGuard", () => {
 
     expect(screen.getByText("Manajemen Akun STAFF")).toBeInTheDocument();
   });
+
+  it("blocks KOMTING and STAFF from /admin/operating-hours while allowing ADMIN", async () => {
+    mockPathname = "/admin/operating-hours";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "s1",
+        email: "staff@kampus.ac.id",
+        full_name: "Staff",
+        role: "STAFF",
+        account_status: "ACTIVE",
+      },
+    };
+
+    const { rerender } = render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Jam Operasional Admin</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/forbidden");
+    });
+    expect(screen.queryByText("Jam Operasional Admin")).not.toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "k1",
+        email: "komting@kampus.ac.id",
+        full_name: "Komting",
+        role: "KOMTING",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Jam Operasional Admin</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText("Jam Operasional Admin")).not.toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "a1",
+        email: "admin@kampus.ac.id",
+        full_name: "Admin",
+        role: "ADMIN",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Jam Operasional Admin</div>
+      </RoleGuard>
+    );
+
+    expect(screen.getByText("Jam Operasional Admin")).toBeInTheDocument();
+  });
 });

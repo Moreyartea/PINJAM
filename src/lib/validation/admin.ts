@@ -82,3 +82,62 @@ export function validateUpdateProjectorForm(values: {
   }
   return errors;
 }
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
+
+export function normalizeApiTime(value: string): string {
+  const trimmed = value.trim();
+  const match = TIME_PATTERN.exec(trimmed);
+  if (!match) return trimmed;
+  return `${match[1]}:${match[2]}:${match[3] ?? "00"}`;
+}
+
+export function toTimeMinutes(value: string): number | null {
+  const match = TIME_PATTERN.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export interface OperatingHoursValidationErrors {
+  date?: string;
+  opensAt?: string;
+  closesAt?: string;
+  adminEarlyOpenAt?: string;
+}
+
+export function validateOperatingHoursForm(values: {
+  date: string;
+  opensAt: string;
+  closesAt: string;
+  adminEarlyOpenAt: string;
+}): OperatingHoursValidationErrors {
+  const errors: OperatingHoursValidationErrors = {};
+
+  if (!DATE_PATTERN.test(values.date.trim())) {
+    errors.date = "Tanggal layanan harus berformat YYYY-MM-DD.";
+  }
+
+  const opensMin = toTimeMinutes(values.opensAt);
+  if (opensMin === null) {
+    errors.opensAt = "Jam buka wajib diisi dengan format HH:mm.";
+  }
+
+  const closesMin = toTimeMinutes(values.closesAt);
+  if (closesMin === null) {
+    errors.closesAt = "Jam tutup wajib diisi dengan format HH:mm.";
+  } else if (opensMin !== null && closesMin <= opensMin) {
+    errors.closesAt = "Jam tutup harus lebih akhir dari jam buka.";
+  }
+
+  if (values.adminEarlyOpenAt.trim()) {
+    const earlyMin = toTimeMinutes(values.adminEarlyOpenAt);
+    if (earlyMin === null) {
+      errors.adminEarlyOpenAt = "Jam pembukaan lebih awal harus berformat HH:mm.";
+    } else if (opensMin !== null && earlyMin > opensMin) {
+      errors.adminEarlyOpenAt = "Pembukaan lebih awal tidak boleh melampaui jam buka layanan.";
+    }
+  }
+
+  return errors;
+}
