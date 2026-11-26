@@ -10,6 +10,8 @@ export const env = {
   appName: process.env.NEXT_PUBLIC_APP_NAME?.trim() || "PINJAM",
   apiBaseUrl: (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "").replace(/\/+$/, ""),
   timezone: process.env.NEXT_PUBLIC_APP_TIMEZONE?.trim() || "Asia/Jakarta",
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "",
+  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "",
   isProduction,
   // Mock mode must never be active in production (FRONTEND_SPEC_PINJAM.md §12.5).
   useMockApi: !isProduction && rawUseMock,

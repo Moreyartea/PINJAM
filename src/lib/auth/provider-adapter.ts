@@ -6,9 +6,12 @@ import type {
   EmailVerificationResult,
 } from "@/services/contracts";
 
+export type AuthStateChangeCallback = (event: string, session: AuthSession | null) => void;
+export type UnsubscribeFn = () => void;
+
 /**
  * Provider-agnostic authentication adapter interface.
- * External providers (e.g. Supabase Auth, once confirmed in Open Decisions)
+ * External providers (e.g. Supabase Auth)
  * can register an implementation without changing UI or API services.
  */
 export interface AuthProviderAdapter {
@@ -16,6 +19,7 @@ export interface AuthProviderAdapter {
   signInWithPassword(credentials: AuthCredentials): Promise<AuthSession>;
   verifyEmail(params: EmailVerificationParams): Promise<EmailVerificationResult>;
   signOut(): Promise<void>;
+  onAuthStateChange?: (callback: AuthStateChangeCallback) => UnsubscribeFn;
 }
 
 let activeAdapter: AuthProviderAdapter | null = null;
