@@ -18,14 +18,19 @@ import {
   MOCK_SIMULATION_APPLICATIONS,
   MOCK_SIMULATION_BOOKINGS,
   MOCK_SIMULATION_LOANS,
+  MOCK_SIMULATION_MAINTENANCE,
   MOCK_SIMULATION_PROFILES,
   MOCK_SIMULATION_PROJECTORS,
+  MOCK_SIMULATION_QR_TOKENS,
   type MockAccountKey,
 } from "@/services/mock/mock-fixtures";
 import type {
   Booking,
   KomtingApplication,
+  Loan,
+  MaintenanceRecord,
   OperatingHoursSnapshot,
+  Projector,
   UserProfile,
 } from "@/types/domain";
 
@@ -38,8 +43,42 @@ interface StoredMockSession {
 
 let memoryMockSession: StoredMockSession | null = null;
 let latestSubmittedMockApplication: KomtingApplication | null = null;
-const mockBookingsStore: Booking[] = [...MOCK_SIMULATION_BOOKINGS];
+const mockProjectorsStore: Projector[] = MOCK_SIMULATION_PROJECTORS.map((p) => ({ ...p }));
+const mockBookingsStore: Booking[] = MOCK_SIMULATION_BOOKINGS.map((b) => ({
+  ...b,
+  pickup_window: { ...b.pickup_window },
+}));
+const mockLoansStore: Loan[] = MOCK_SIMULATION_LOANS.map((l) => ({ ...l }));
+const mockMaintenanceStore: MaintenanceRecord[] = MOCK_SIMULATION_MAINTENANCE.map((m) => ({
+  ...m,
+}));
+const mockQrTokenStore = new Map<string, { booking_id: string }>(
+  Object.entries(MOCK_SIMULATION_QR_TOKENS)
+);
 const mockIdempotencyStore = new Map<string, { payloadHash: string; booking: Booking }>();
+const mockStaffIdempotencyStore = new Map<string, { payloadHash: string; result: unknown }>();
+
+function resolveMockQrDisplayContext(komtingId: string, projectorId: string) {
+  const komtingProfile = Object.values(MOCK_SIMULATION_PROFILES).find((p) => p.id === komtingId);
+  const projector = mockProjectorsStore.find((p) => p.id === projectorId);
+  return {
+    komting_name: komtingProfile?.full_name ?? "Simulasi Komting",
+    class_name: komtingProfile?.komting_assignment?.class_name ?? "IF-01",
+    projector_name: projector?.name ?? projectorId,
+  };
+}
+
+function requireStaffOrAdminMock(): UserProfile {
+  const profile = resolveCurrentMockProfile();
+  if (profile.role !== "STAFF" && profile.role !== "ADMIN") {
+    throw new ApiClientError({
+      status: 403,
+      code: "FORBIDDEN",
+      requestId: createMockRequestId(),
+    });
+  }
+  return profile;
+}
 
 function getMockOperatingHoursForDate(date: string): OperatingHoursSnapshot {
   const tomorrow = getJakartaTomorrowDateString();
@@ -357,10 +396,8 @@ export const mockServices: ServiceRegistry = {
       }
 
       const filtered = params?.physical_status
-        ? MOCK_SIMULATION_PROJECTORS.filter(
-            (item) => item.physical_status === params.physical_status
-          )
-        : MOCK_SIMULATION_PROJECTORS;
+        ? mockProjectorsStore.filter((item) => item.physical_status === params.physical_status)
+        : mockProjectorsStore;
 
       const page = params?.page ?? 1;
       const pageSize = params?.page_size ?? 20;
@@ -383,7 +420,7 @@ export const mockServices: ServiceRegistry = {
 
     async getProjector(projectorId) {
       await simulateMockRequest();
-      const found = MOCK_SIMULATION_PROJECTORS.find((p) => p.id === projectorId);
+      const found = mockProjectorsStore.find((p) => p.id === projectorId);
       if (!found) {
         throw new ApiClientError({
           status: 404,
@@ -647,52 +684,200 @@ export const mockServices: ServiceRegistry = {
       return wrapMockSingle(updated);
     },
     async listStaffBookings(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      requireStaffOrAdminMock();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const filtered = mockBookingsStore.filter((item) => {
+        if (params?.date && item.booking_date !== params.date) return false;
+        if (params?.status && item.status !== params.status) return false;
+        return true;
+      });
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
     async getStaffBooking(bookingId) {
       await simulateMockRequest();
-      throw new ApiClientError({
-        status: 404,
-        code: "PROJECTOR_NOT_FOUND",
-        message: `Simulasi: booking ${bookingId} belum tersedia.`,
-        requestId: createMockRequestId(),
-      });
+      requireStaffOrAdminMock();
+      const found = mockBookingsStore.find((b) => b.id === bookingId);
+      if (!found) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: booking ${bookingId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      return wrapMockSingle(found);
     },
   },
 
   loan: {
     async listStaffLoans(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      requireStaffOrAdminMock();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const filtered = mockLoansStore.filter((item) => {
+        if (params?.status && item.status !== params.status) return false;
+        return true;
+      });
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
     async getStaffLoan(loanId) {
       await simulateMockRequest();
-      throw new ApiClientError({
-        status: 404,
-        code: "LOAN_NOT_ACTIVE",
-        message: `Simulasi: loan ${loanId} belum tersedia.`,
-        requestId: createMockRequestId(),
-      });
+      requireStaffOrAdminMock();
+      const found = mockLoansStore.find((l) => l.id === loanId);
+      if (!found) {
+        throw new ApiClientError({
+          status: 404,
+          code: "LOAN_NOT_ACTIVE",
+          message: `Simulasi: loan ${loanId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      return wrapMockSingle(found);
     },
-    async confirmReturn(loanId) {
+    async confirmReturn(loanId, formData, idempotencyKey) {
       await simulateMockRequest();
-      return wrapMockSingle({
+      requireStaffOrAdminMock();
+
+      const qrPayload = String(formData.get("qr_payload") ?? "");
+      const projectorCondition = String(formData.get("projector_condition") ?? "NORMAL");
+      const accessoriesCondition = String(formData.get("accessories_condition") ?? "COMPLETE");
+      const evidencePhoto = formData.get("evidence_photo");
+      const payloadHash = JSON.stringify({
+        loanId,
+        qrPayload,
+        projectorCondition,
+        accessoriesCondition,
+      });
+
+      const existing = mockStaffIdempotencyStore.get(`return:${idempotencyKey}`);
+      if (existing) {
+        if (existing.payloadHash !== payloadHash) {
+          throw new ApiClientError({
+            status: 409,
+            code: "IDEMPOTENCY_KEY_REUSED",
+            requestId: createMockRequestId(),
+          });
+        }
+        return wrapMockSingle(existing.result as never);
+      }
+
+      const loanIndex = mockLoansStore.findIndex((l) => l.id === loanId);
+      const loan = loanIndex >= 0 ? mockLoansStore[loanIndex] : undefined;
+      if (!loan || loan.status !== "ACTIVE") {
+        throw new ApiClientError({
+          status: 409,
+          code: "LOAN_NOT_ACTIVE",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      if (
+        (projectorCondition === "DAMAGED" || accessoriesCondition === "INCOMPLETE") &&
+        !(evidencePhoto instanceof File && evidencePhoto.size > 0)
+      ) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_EVIDENCE_REQUIRED",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const disposition =
+        projectorCondition === "DAMAGED" || accessoriesCondition === "INCOMPLETE"
+          ? "MAINTENANCE"
+          : "AVAILABLE";
+      const returnedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
+      mockLoansStore[loanIndex] = {
+        ...loan,
+        status: "RETURNED",
+        returned_at: returnedAt,
+        return_condition: projectorCondition,
+      };
+
+      const projIndex = mockProjectorsStore.findIndex((p) => p.id === loan.projector_id);
+      if (projIndex >= 0 && mockProjectorsStore[projIndex]) {
+        mockProjectorsStore[projIndex] = {
+          ...mockProjectorsStore[projIndex],
+          physical_status: disposition,
+        };
+      }
+
+      if (disposition === "MAINTENANCE") {
+        mockMaintenanceStore.unshift({
+          id: `sim_maint_${Date.now().toString(36)}`,
+          projector_id: loan.projector_id,
+          reason:
+            projectorCondition === "DAMAGED"
+              ? "Kerusakan unit saat pengembalian (simulasi)."
+              : "Aksesori tidak lengkap saat pengembalian (simulasi).",
+          note: String(formData.get("note") ?? "") || null,
+          status: "IN_PROGRESS",
+          started_at: returnedAt,
+          resolution_note: null,
+          completed_at: null,
+        });
+      }
+
+      const result = {
         loan: {
-          id: loanId,
+          id: loan.id,
           status: "RETURNED",
-          returned_at: new Date().toISOString(),
+          returned_at: returnedAt,
         },
         inspection: {
-          projector_condition: "NORMAL",
-          accessories_condition: "COMPLETE",
-          unit_disposition: "AVAILABLE",
+          projector_condition: projectorCondition,
+          accessories_condition: accessoriesCondition,
+          unit_disposition: disposition,
         },
         projector: {
-          id: "sim_prj_01",
-          physical_status: "AVAILABLE",
+          id: loan.projector_id,
+          physical_status: disposition,
         },
-      });
+      };
+      mockStaffIdempotencyStore.set(`return:${idempotencyKey}`, { payloadHash, result });
+      return wrapMockSingle(result);
     },
     async listKomtingLoans(params) {
       const scenario = await simulateMockRequest();
@@ -701,7 +886,7 @@ export const mockServices: ServiceRegistry = {
       }
 
       const profile = resolveCurrentMockProfile();
-      const filtered = MOCK_SIMULATION_LOANS.filter((item) => {
+      const filtered = mockLoansStore.filter((item) => {
         if (item.komting_id !== profile.id) return false;
         if (params?.status && item.status !== params.status) return false;
         return true;
@@ -746,76 +931,304 @@ export const mockServices: ServiceRegistry = {
           requestId: createMockRequestId(),
         });
       }
+
+      for (const [token, mapped] of mockQrTokenStore.entries()) {
+        if (mapped.booking_id === booking.id) {
+          return wrapMockSingle({
+            qr_payload: token,
+            expires_at: booking.pickup_window.closes_at,
+          });
+        }
+      }
+
+      const generatedToken = `sim_opaque_token_${booking.booking_code.slice(-3)}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      mockQrTokenStore.set(generatedToken, { booking_id: booking.id });
       return wrapMockSingle({
-        qr_payload: `sim_opaque_token_${booking.booking_code.slice(-3)}_${Math.random()
-          .toString(36)
-          .slice(2, 10)}`,
+        qr_payload: generatedToken,
         expires_at: booking.pickup_window.closes_at,
       });
     },
     async validateQr(payload) {
       await simulateMockRequest();
+      requireStaffOrAdminMock();
+
+      const token = payload.qr_payload.trim();
+      if (!token || token === "invalid") {
+        throw new ApiClientError({
+          status: 422,
+          code: "QR_INVALID",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (token === "expired") {
+        throw new ApiClientError({
+          status: 422,
+          code: "QR_EXPIRED",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const entry = mockQrTokenStore.get(token);
+      if (!entry) {
+        throw new ApiClientError({
+          status: 422,
+          code: "QR_INVALID",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const booking = mockBookingsStore.find((b) => b.id === entry.booking_id);
+      const loan = mockLoansStore.find(
+        (l) => l.booking_id === entry.booking_id && l.status === "ACTIVE"
+      );
+
+      if (payload.action === "PICKUP") {
+        if (!booking || booking.status !== "CONFIRMED") {
+          throw new ApiClientError({
+            status: 409,
+            code: "QR_ACTION_MISMATCH",
+            message: "Booking tidak berstatus CONFIRMED untuk pickup.",
+            requestId: createMockRequestId(),
+          });
+        }
+        const display = resolveMockQrDisplayContext(booking.komting_id, booking.projector_id);
+        return wrapMockSingle({
+          valid: true,
+          action: "PICKUP",
+          transaction: {
+            booking_id: booking.id,
+            booking_code: booking.booking_code,
+            komting_name: display.komting_name,
+            class_name: display.class_name,
+            projector_name: display.projector_name,
+            status: booking.status,
+          },
+          requires_confirmation: true,
+        });
+      }
+
+      if (!loan || loan.status !== "ACTIVE") {
+        throw new ApiClientError({
+          status: 409,
+          code: "QR_ACTION_MISMATCH",
+          message: "Tidak ditemukan loan ACTIVE untuk token QR ini.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const display = resolveMockQrDisplayContext(loan.komting_id, loan.projector_id);
       return wrapMockSingle({
-        valid: false,
-        action: payload.action,
+        valid: true,
+        action: "RETURN",
         transaction: {
-          booking_id: "sim_booking_01",
-          booking_code: "BKG-SIM-001",
-          komting_name: "Simulasi Komting",
-          class_name: "IF-01",
-          projector_name: "Epson EB-X500 (Simulasi)",
-          status: "CONFIRMED",
+          booking_id: loan.booking_id,
+          booking_code: booking?.booking_code ?? loan.booking_id,
+          komting_name: display.komting_name,
+          class_name: display.class_name,
+          projector_name: display.projector_name,
+          status: loan.status,
         },
         requires_confirmation: true,
       });
     },
-    async confirmPickup(bookingId) {
+    async confirmPickup(bookingId, payload, idempotencyKey) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        booking: { id: bookingId, status: "FULFILLED" },
+      requireStaffOrAdminMock();
+
+      const payloadHash = JSON.stringify({ bookingId, payload });
+      const existing = mockStaffIdempotencyStore.get(`pickup:${idempotencyKey}`);
+      if (existing) {
+        if (existing.payloadHash !== payloadHash) {
+          throw new ApiClientError({
+            status: 409,
+            code: "IDEMPOTENCY_KEY_REUSED",
+            requestId: createMockRequestId(),
+          });
+        }
+        return wrapMockSingle(existing.result as never);
+      }
+
+      const bookingIndex = mockBookingsStore.findIndex((b) => b.id === bookingId);
+      const booking = bookingIndex >= 0 ? mockBookingsStore[bookingIndex] : undefined;
+      if (!booking) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (booking.status !== "CONFIRMED") {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_NOT_PICKUP_ELIGIBLE",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const pickedUpAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      const newLoanId = `sim_loan_${Date.now().toString(36)}`;
+
+      mockBookingsStore[bookingIndex] = {
+        ...booking,
+        status: "FULFILLED",
+      };
+
+      const createdLoan: Loan = {
+        id: newLoanId,
+        booking_id: booking.id,
+        projector_id: booking.projector_id,
+        komting_id: booking.komting_id,
+        status: "ACTIVE",
+        picked_up_at: pickedUpAt,
+        returned_at: null,
+        return_condition: null,
+      };
+      mockLoansStore.unshift(createdLoan);
+      mockQrTokenStore.set(payload.qr_payload, { booking_id: booking.id });
+
+      const projIndex = mockProjectorsStore.findIndex((p) => p.id === booking.projector_id);
+      if (projIndex >= 0 && mockProjectorsStore[projIndex]) {
+        mockProjectorsStore[projIndex] = {
+          ...mockProjectorsStore[projIndex],
+          physical_status: "BORROWED",
+        };
+      }
+
+      const result = {
+        booking: { id: booking.id, status: "FULFILLED" },
         loan: {
-          id: "sim_loan_01",
+          id: newLoanId,
           status: "ACTIVE",
-          picked_up_at: new Date().toISOString(),
+          picked_up_at: pickedUpAt,
         },
         projector: {
-          id: "sim_prj_01",
+          id: booking.projector_id,
           physical_status: "BORROWED",
         },
-      });
+      };
+      mockStaffIdempotencyStore.set(`pickup:${idempotencyKey}`, { payloadHash, result });
+      return wrapMockSingle(result);
     },
   },
 
   maintenance: {
     async listMaintenance(params) {
-      await simulateMockRequest();
-      return wrapMockList([], params?.page, params?.page_size);
+      const scenario = await simulateMockRequest();
+      requireStaffOrAdminMock();
+      if (scenario === "empty") {
+        return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
+      }
+
+      const filtered = mockMaintenanceStore.filter((item) => {
+        if (params?.status && item.status !== params.status) return false;
+        return true;
+      });
+
+      const page = params?.page ?? 1;
+      const pageSize = params?.page_size ?? 20;
+      const start = (page - 1) * pageSize;
+      const paged = filtered.slice(start, start + pageSize);
+
+      return {
+        data: paged,
+        meta: {
+          request_id: createMockRequestId(),
+          pagination: {
+            page,
+            page_size: pageSize,
+            total_items: filtered.length,
+            total_pages: filtered.length === 0 ? 0 : Math.ceil(filtered.length / pageSize),
+          },
+        },
+      };
     },
     async createMaintenance(projectorId, payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: "sim_maint_01",
+      requireStaffOrAdminMock();
+
+      const projIndex = mockProjectorsStore.findIndex((p) => p.id === projectorId);
+      const projector = projIndex >= 0 ? mockProjectorsStore[projIndex] : undefined;
+      if (!projector) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (projector.physical_status === "BORROWED") {
+        throw new ApiClientError({
+          status: 409,
+          code: "PROJECTOR_HAS_ACTIVE_LOAN",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      mockProjectorsStore[projIndex] = {
+        ...projector,
+        physical_status: "MAINTENANCE",
+      };
+
+      const record: MaintenanceRecord = {
+        id: `sim_maint_${Date.now().toString(36)}`,
         projector_id: projectorId,
         reason: payload.reason,
         note: payload.note ?? null,
         status: "IN_PROGRESS",
-        started_at: new Date().toISOString(),
+        started_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
         resolution_note: null,
         completed_at: null,
-      });
+      };
+      mockMaintenanceStore.unshift(record);
+      return wrapMockSingle(record);
     },
     async completeMaintenance(maintenanceId, payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        id: maintenanceId,
-        projector_id: "sim_prj_01",
-        reason: "Simulasi",
-        note: null,
+      requireStaffOrAdminMock();
+
+      const maintIndex = mockMaintenanceStore.findIndex((m) => m.id === maintenanceId);
+      const record = maintIndex >= 0 ? mockMaintenanceStore[maintIndex] : undefined;
+      if (!record) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: catatan maintenance ${maintenanceId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const hasActiveLoan = mockLoansStore.some(
+        (l) => l.projector_id === record.projector_id && l.status === "ACTIVE"
+      );
+      if (payload.set_projector_available && hasActiveLoan) {
+        throw new ApiClientError({
+          status: 409,
+          code: "PROJECTOR_HAS_ACTIVE_LOAN",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const completedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      const updated: MaintenanceRecord = {
+        ...record,
         status: "COMPLETED",
-        started_at: new Date().toISOString(),
         resolution_note: payload.resolution_note,
-        completed_at: new Date().toISOString(),
-      });
+        completed_at: completedAt,
+      };
+      mockMaintenanceStore[maintIndex] = updated;
+
+      if (payload.set_projector_available) {
+        const projIndex = mockProjectorsStore.findIndex((p) => p.id === record.projector_id);
+        if (projIndex >= 0 && mockProjectorsStore[projIndex]) {
+          mockProjectorsStore[projIndex] = {
+            ...mockProjectorsStore[projIndex],
+            physical_status: "AVAILABLE",
+          };
+        }
+      }
+
+      return wrapMockSingle(updated);
     },
   },
 
@@ -862,8 +1275,46 @@ export const mockServices: ServiceRegistry = {
     },
 
     async getStaffDashboard() {
-      await simulateMockRequest();
-      return wrapMockSingle({});
+      const scenario = await simulateMockRequest();
+      requireStaffOrAdminMock();
+      if (scenario === "empty") {
+        return wrapMockSingle({
+          bookings_today_count: 0,
+          pending_pickup_count: 0,
+          active_loans_count: 0,
+          overdue_loans_count: 0,
+          maintenance_units_count: 0,
+          pending_pickups: [],
+          active_loans: [],
+          maintenance_units: [],
+          recent_activities: [],
+        });
+      }
+
+      const pendingPickups = mockBookingsStore.filter((b) => b.status === "CONFIRMED");
+      const activeLoans = mockLoansStore.filter((l) => l.status === "ACTIVE");
+      const maintenanceUnits = mockProjectorsStore.filter(
+        (p) => p.physical_status === "MAINTENANCE"
+      );
+
+      return wrapMockSingle({
+        bookings_today_count: mockBookingsStore.length,
+        pending_pickup_count: pendingPickups.length,
+        active_loans_count: activeLoans.length,
+        overdue_loans_count: 0,
+        maintenance_units_count: maintenanceUnits.length,
+        pending_pickups: pendingPickups,
+        active_loans: activeLoans,
+        maintenance_units: maintenanceUnits,
+        recent_activities: [
+          {
+            id: "sim_act_1",
+            message:
+              "Simulasi: gunakan token sim_qr_pickup_ready_01 untuk uji pickup atau sim_qr_return_active_01 untuk uji return.",
+            timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+          },
+        ],
+      });
     },
 
     async correctTransaction() {

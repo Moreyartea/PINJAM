@@ -172,3 +172,21 @@ export interface KomtingDashboardSummary {
   relevant_projectors?: Projector[];
   reminders?: DashboardReminder[];
 }
+
+export interface StaffActivityItem {
+  id?: string;
+  message: string;
+  timestamp?: string;
+}
+
+export interface StaffDashboardSummary {
+  bookings_today_count?: number;
+  pending_pickup_count?: number;
+  active_loans_count?: number;
+  overdue_loans_count?: number;
+  maintenance_units_count?: number;
+  pending_pickups?: Booking[];
+  active_loans?: Loan[];
+  maintenance_units?: Projector[];
+  recent_activities?: StaffActivityItem[];
+}

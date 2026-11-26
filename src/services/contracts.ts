@@ -21,6 +21,7 @@ import type {
   ProjectorPhysicalStatus,
   QRActionType,
   ReturnInspection,
+  StaffDashboardSummary,
   UserProfile,
 } from "@/types/domain";
 
@@ -250,7 +251,7 @@ export interface OperatingHoursService {
 
 export interface AdminService {
   getKomtingDashboard(): Promise<ApiSingleResponse<KomtingDashboardSummary>>;
-  getStaffDashboard(): Promise<ApiSingleResponse<Record<string, unknown>>>;
+  getStaffDashboard(): Promise<ApiSingleResponse<StaffDashboardSummary>>;
   correctTransaction(
     transactionId: string,
     payload: {
