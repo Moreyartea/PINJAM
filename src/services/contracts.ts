@@ -11,6 +11,7 @@ import type {
   BookingStatus,
   HandoverActorType,
   KomtingApplication,
+  KomtingDashboardSummary,
   Loan,
   LoanStatus,
   MaintenanceRecord,
@@ -28,8 +29,26 @@ export interface AuthSession {
   expires_at?: string;
 }
 
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export interface EmailVerificationParams {
+  token?: string;
+  token_hash?: string;
+  type?: string;
+}
+
+export interface EmailVerificationResult {
+  verified: boolean;
+  message: string;
+}
+
 export interface AuthService {
   getSession(): Promise<AuthSession | null>;
+  signInWithPassword(credentials: AuthCredentials): Promise<AuthSession>;
+  verifyEmail(params: EmailVerificationParams): Promise<EmailVerificationResult>;
   signOut(): Promise<void>;
 }
 
@@ -230,7 +249,7 @@ export interface OperatingHoursService {
 }
 
 export interface AdminService {
-  getKomtingDashboard(): Promise<ApiSingleResponse<Record<string, unknown>>>;
+  getKomtingDashboard(): Promise<ApiSingleResponse<KomtingDashboardSummary>>;
   getStaffDashboard(): Promise<ApiSingleResponse<Record<string, unknown>>>;
   correctTransaction(
     transactionId: string,

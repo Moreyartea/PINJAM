@@ -1,0 +1,198 @@
+import type {
+  KomtingApplication,
+  KomtingDashboardSummary,
+  Projector,
+  UserProfile,
+} from "@/types/domain";
+
+export type MockAccountKey =
+  "komting_active" | "komting_pending" | "komting_inactive" | "staff" | "admin";
+
+/**
+ * Development-only simulation fixtures matching API_CONTRACT_PINJAM.md shapes.
+ * Strictly NOT production data.
+ */
+export const MOCK_SIMULATION_PROFILES: Record<MockAccountKey, UserProfile> = {
+  komting_active: {
+    id: "sim_user_komting_01",
+    email: "komting.aktif@simulasi.local",
+    full_name: "Simulasi Komting Aktif",
+    role: "KOMTING",
+    account_status: "ACTIVE",
+    created_at: "2026-11-20T08:00:00Z",
+    komting_assignment: {
+      id: "sim_assign_01",
+      user_id: "sim_user_komting_01",
+      class_name: "IF-01",
+      status: "ACTIVE",
+      started_at: "2026-11-20T09:00:00Z",
+      ended_at: null,
+    },
+  },
+  komting_pending: {
+    id: "sim_user_komting_02",
+    email: "calon.komting@simulasi.local",
+    full_name: "Simulasi Calon Komting",
+    role: "KOMTING",
+    account_status: "PENDING_VERIFICATION",
+    created_at: "2026-11-26T07:00:00Z",
+    komting_assignment: null,
+  },
+  komting_inactive: {
+    id: "sim_user_komting_03",
+    email: "komting.nonaktif@simulasi.local",
+    full_name: "Simulasi Mantan Komting",
+    role: "KOMTING",
+    account_status: "INACTIVE",
+    created_at: "2026-10-01T08:00:00Z",
+    komting_assignment: {
+      id: "sim_assign_00",
+      user_id: "sim_user_komting_03",
+      class_name: "IF-02",
+      status: "INACTIVE",
+      started_at: "2026-10-01T08:00:00Z",
+      ended_at: "2026-11-15T10:00:00Z",
+    },
+  },
+  staff: {
+    id: "sim_user_staff_01",
+    email: "staff@simulasi.local",
+    full_name: "Simulasi Petugas Operasional",
+    role: "STAFF",
+    account_status: "ACTIVE",
+    created_at: "2026-11-01T08:00:00Z",
+    komting_assignment: null,
+  },
+  admin: {
+    id: "sim_user_admin_01",
+    email: "admin@simulasi.local",
+    full_name: "Simulasi Administrator",
+    role: "ADMIN",
+    account_status: "ACTIVE",
+    created_at: "2026-11-01T08:00:00Z",
+    komting_assignment: null,
+  },
+};
+
+export const MOCK_EMAIL_TO_ACCOUNT: Record<string, MockAccountKey> = {
+  "komting.aktif@simulasi.local": "komting_active",
+  "calon.komting@simulasi.local": "komting_pending",
+  "komting.nonaktif@simulasi.local": "komting_inactive",
+  "staff@simulasi.local": "staff",
+  "admin@simulasi.local": "admin",
+};
+
+export const MOCK_SIMULATION_PROJECTORS: Projector[] = [
+  {
+    id: "sim_prj_01",
+    asset_code: "SIM-PRJ-001",
+    name: "Epson EB-X500 (Simulasi)",
+    brand: "Epson",
+    model: "EB-X500",
+    physical_status: "AVAILABLE",
+    is_active: true,
+  },
+  {
+    id: "sim_prj_02",
+    asset_code: "SIM-PRJ-002",
+    name: "BenQ MS560 (Simulasi)",
+    brand: "BenQ",
+    model: "MS560",
+    physical_status: "BORROWED",
+    is_active: true,
+  },
+  {
+    id: "sim_prj_03",
+    asset_code: "SIM-PRJ-003",
+    name: "Epson EB-E01 (Simulasi)",
+    brand: "Epson",
+    model: "EB-E01",
+    physical_status: "MAINTENANCE",
+    is_active: true,
+  },
+  {
+    id: "sim_prj_04",
+    asset_code: "SIM-PRJ-004",
+    name: "ViewSonic PA503S (Simulasi)",
+    brand: "ViewSonic",
+    model: "PA503S",
+    physical_status: "AVAILABLE",
+    is_active: true,
+  },
+  {
+    id: "sim_prj_05",
+    asset_code: "SIM-PRJ-005",
+    name: "InFocus IN112x (Simulasi)",
+    brand: "InFocus",
+    model: "IN112x",
+    physical_status: "INACTIVE",
+    is_active: false,
+  },
+];
+
+export const MOCK_SIMULATION_APPLICATIONS: Record<string, KomtingApplication> = {
+  sim_user_komting_01: {
+    application_id: "sim_app_01",
+    full_name: "Simulasi Komting Aktif",
+    email: "komting.aktif@simulasi.local",
+    student_id: "SIM-2024001",
+    class_name: "IF-01",
+    application_type: "NEW",
+    status: "APPROVED",
+    submitted_at: "2026-11-20T08:15:00Z",
+    admin_note: "Data simulasi terverifikasi.",
+    rejection_reason: null,
+  },
+  sim_user_komting_02: {
+    application_id: "sim_app_02",
+    full_name: "Simulasi Calon Komting",
+    email: "calon.komting@simulasi.local",
+    student_id: "SIM-2024002",
+    class_name: "IF-03",
+    application_type: "PENDING_REPLACEMENT_NOTICE",
+    status: "PENDING_REPLACEMENT_NOTICE",
+    submitted_at: "2026-11-26T07:05:00Z",
+    admin_note: null,
+    rejection_reason: null,
+  },
+  sim_user_komting_03: {
+    application_id: "sim_app_03",
+    full_name: "Simulasi Mantan Komting",
+    email: "komting.nonaktif@simulasi.local",
+    student_id: "SIM-2023099",
+    class_name: "IF-02",
+    application_type: "NEW",
+    status: "REJECTED",
+    submitted_at: "2026-11-18T08:00:00Z",
+    admin_note: null,
+    rejection_reason: "Contoh penolakan simulasi: foto kartu identitas kurang jelas.",
+  },
+};
+
+export function createMockKomtingDashboard(profile: UserProfile): KomtingDashboardSummary {
+  return {
+    active_assignment: profile.komting_assignment ?? null,
+    active_booking: null,
+    active_loan: null,
+    recent_bookings: [],
+    relevant_projectors: MOCK_SIMULATION_PROJECTORS.slice(0, 3),
+    reminders:
+      profile.account_status !== "ACTIVE"
+        ? [
+            {
+              id: "sim_rem_status",
+              level: "warning",
+              message:
+                "Akun atau penugasan komting Anda belum aktif. Fitur booking tidak tersedia sampai status aktif.",
+            },
+          ]
+        : [
+            {
+              id: "sim_rem_fe1",
+              level: "info",
+              message:
+                "Mode simulasi FE-1: belum ada booking atau peminjaman aktif pada akun simulasi ini.",
+            },
+          ],
+  };
+}
