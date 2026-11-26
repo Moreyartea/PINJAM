@@ -262,4 +262,68 @@ describe("RoleGuard", () => {
 
     expect(screen.getByText("Inventaris Admin")).toBeInTheDocument();
   });
+
+  it("blocks KOMTING and STAFF from /admin/staff while allowing ADMIN", async () => {
+    mockPathname = "/admin/staff";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "s1",
+        email: "staff@kampus.ac.id",
+        full_name: "Staff",
+        role: "STAFF",
+        account_status: "ACTIVE",
+      },
+    };
+
+    const { rerender } = render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Manajemen Akun STAFF</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/forbidden");
+    });
+    expect(screen.queryByText("Manajemen Akun STAFF")).not.toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "k1",
+        email: "komting@kampus.ac.id",
+        full_name: "Komting",
+        role: "KOMTING",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Manajemen Akun STAFF</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText("Manajemen Akun STAFF")).not.toBeInTheDocument();
+
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "a1",
+        email: "admin@kampus.ac.id",
+        full_name: "Admin",
+        role: "ADMIN",
+        account_status: "ACTIVE",
+      },
+    };
+    rerender(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Manajemen Akun STAFF</div>
+      </RoleGuard>
+    );
+
+    expect(screen.getByText("Manajemen Akun STAFF")).toBeInTheDocument();
+  });
 });

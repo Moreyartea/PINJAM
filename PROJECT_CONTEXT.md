@@ -1,7 +1,7 @@
 # PROJECT CONTEXT — PINJAM
 
 - **Terakhir Diperbarui:** 26 November 2026
-- **Sprint Terakhir:** Sprint FE-4.3 — ADMIN Projector Inventory Management
+- **Sprint Terakhir:** Sprint FE-4.4 — ADMIN Staff Account Management (Contract-Gap Safe Page)
 - **Branch Frontend Aktif:** `feat/frontend-fe4-admin` (dibuat dari `staging` pasca merge FE-3 `1a9c2fe`)
 - **Acuan Utama:**
 1. `PRD_PINJAM_FINAL.md` (v2.0.0)
@@ -67,6 +67,7 @@ PINJAMv2/
     │   │   ├── projectors/
     │   │   │   ├── [id]/page.tsx
     │   │   │   └── page.tsx
+    │   │   ├── staff/page.tsx
     │   │   └── page.tsx
     │   ├── application/status/page.tsx
     │   ├── forbidden/page.tsx
@@ -133,12 +134,14 @@ PINJAMv2/
     │   │   ├── __tests__/
     │   │   │   ├── admin-applications.test.tsx
     │   │   │   ├── admin-dashboard-view.test.tsx
-    │   │   │   └── admin-projectors.test.tsx
+    │   │   │   ├── admin-projectors.test.tsx
+    │   │   │   └── admin-staff-management.test.tsx
     │   │   ├── admin-application-detail-view.tsx
     │   │   ├── admin-applications-list-view.tsx
     │   │   ├── admin-dashboard-view.tsx
     │   │   ├── admin-projector-detail-view.tsx
-    │   │   └── admin-projectors-list-view.tsx
+    │   │   ├── admin-projectors-list-view.tsx
+    │   │   └── admin-staff-management-view.tsx
     │   ├── auth/
     │   │   ├── __tests__/login-form.test.tsx
     │   │   ├── login-form.tsx
@@ -256,7 +259,8 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
 - `/admin/applications/[id]` (**FE-4.2**) — Detail pengajuan komting (`AdminApplicationDetailView`): informasi pendaftar/kelas/status/catatan, panel khusus Dokumen Identitas (Privat) yang menjelaskan pratinjau foto belum tersedia karena menunggu mekanisme akses privat backend (tanpa URL publik), serta aksi berstatus-ketat untuk **Approve Pengajuan Baru** (`POST .../approve`), **Reject** dengan alasan wajib (`POST .../reject`), dan **Approve Replacement** atomik dengan `Idempotency-Key` (`POST .../approve-replacement`).
 - `/admin/projectors` (**FE-4.3**) — Daftar & pembuatan inventaris proyektor (`AdminProjectorsListView`) menggunakan `GET /api/v1/projectors` dan `POST /api/v1/admin/projectors`: pencarian client-side (`asset_code`, `name`, `brand`, `model`), filter `physical_status`, pagination, form tambah unit dengan konfirmasi, pemisahan tegas badge status fisik vs aktif/nonaktif inventaris, serta pencegahan double-submit.
 - `/admin/projectors/[id]` (**FE-4.3**) — Detail, edit metadata, & penonaktifan unit (`AdminProjectorDetailView`) menggunakan `GET /api/v1/projectors/{id}`, `PATCH /api/v1/admin/projectors/{id}` (kode aset `disabled` tidak dapat diedit; status fisik tidak diubah lewat form metadata), dan `POST /api/v1/admin/projectors/{id}/deactivate` (dialog konfirmasi dampak, penanganan konflik `PROJECTOR_HAS_ACTIVE_LOAN`, tanpa mengubah status fisik ke `MAINTENANCE`/`AVAILABLE`).
-- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/projectors`, tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/komting`, `/admin/staff`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
+- `/admin/staff` (**FE-4.4**) — Halaman manajemen akun STAFF (`AdminStaffManagementView`, dilindungi `RoleGuard allowedRoles={["ADMIN"]}` + `AdminShell`). Karena `API_CONTRACT_PINJAM.md` (v1.0.0) belum mendefinisikan endpoint daftar, pembuatan manual, pembaruan, maupun aktivasi/penonaktifan akun STAFF, halaman menampilkan pemberitahuan gap kontrak dan batasan keamanan secara jujur (tanpa endpoint fiktif, tanpa mock palsu, tanpa self-registration STAFF).
+- Navigasi ADMIN pada `AdminShell` (`src/components/layout/admin-shell.tsx`) menautkan `/admin`, `/admin/applications`, `/admin/projectors`, `/admin/staff` (badge `Menunggu API`), tautan placeholder berlabel `Segera` untuk modul FE-4 berikutnya (`/admin/komting`, `/admin/operating-hours`, `/admin/audit-logs`, `/admin/corrections`), serta akses langsung ke operasional STAFF (`/staff`).
 
 ---
 
@@ -304,33 +308,34 @@ Seluruh halaman di bawah `/admin/*` dilindungi oleh `RoleGuard` dengan `allowedR
 
 ---
 
-## 7. Hasil Pengujian Terakhir (FE-4.3)
+## 7. Hasil Pengujian Terakhir (FE-4.4)
 
-Seluruh pemeriksaan dijalankan setelah implementasi FE-4.3 dan lulus (exit code `0`):
-- **`npm test` (`vitest run`):** **20 file test, 71 test lulus**:
-  - 4 test baru pada `src/features/admin/__tests__/admin-projectors.test.tsx` (daftar inventaris + pemisahan badge + search + filter + pagination, tambah unit + validasi wajib + kode aset duplikat + double-submit guard, detail + disable `asset_code` + edit metadata + double-submit guard, dan deactivate + konflik loan aktif) serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `KOMTING` dan izinkan `ADMIN` pada `/admin/projectors`; total 8 tests di file tersebut).
-  - Seluruh test FE-1, FE-2, FE-3, FE-4.1, dan FE-4.2 sebelumnya tetap lulus tanpa regresi.
+Seluruh pemeriksaan dijalankan setelah implementasi FE-4.4 dan lulus (exit code `0`):
+- **`npm test` (`vitest run`):** **21 file test, 73 test lulus**:
+  - 1 test baru pada `src/features/admin/__tests__/admin-staff-management.test.tsx` (tampilan gap kontrak manajemen akun STAFF secara jujur tanpa form/endpoint fiktif) serta tambahan 1 test di `src/components/auth/__tests__/role-guard.test.tsx` (blokir `STAFF` & `KOMTING` dan izinkan `ADMIN` pada `/admin/staff`; total 9 tests di file tersebut).
+  - Seluruh test FE-1 s.d. FE-4.3 sebelumnya tetap lulus tanpa regresi.
 - **`npm run typecheck` (`tsc --noEmit`):** Lulus tanpa error.
 - **`npm run lint` (`eslint .`):** Lulus tanpa error.
-- **Prettier check khusus file FE-4.3 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
-- **`npm run build` (`next build`):** Lulus — menghasilkan 21 static pages dan 6 dynamic routes (termasuk `/admin/projectors` dan `/admin/projectors/[id]`).
+- **Prettier check khusus file FE-4.4 & `PROJECT_CONTEXT.md`:** Lulus (`All matched files use Prettier code style!`).
+- **`npm run build` (`next build`):** Lulus — menghasilkan 22 static pages dan 6 dynamic routes (termasuk `/admin/staff`).
 
 ---
 
 ## 8. Open Decisions & Kendala Integrasi
 
-1. **Mekanisme akses foto identitas privat (`/admin/applications/[id]`):** `API_CONTRACT_PINJAM.md` §6.3 & §17 belum mendefinisikan endpoint atau field URL bertanda tangan (*signed URL*) untuk foto identitas pendaftar. UI menampilkan informasi aman bahwa pratinjau dokumen menunggu mekanisme akses privat backend (tanpa URL publik atau fiktif).
-2. **Informasi komting aktif sebelumnya pada response detail replacement:** Kontrak §6.3–6.4 belum menetapkan field objek komting lama dalam `KomtingApplication`; UI membedakan alur replacement menggunakan `application_type` / `status` dan menampilkan data calon pengganti yang tersedia di kontrak.
-3. **Endpoint khusus dashboard ADMIN & manajemen STAFF belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; halaman `/admin/staff`, `/admin/komting`, `/admin/corrections` masih menunggu kejelasan kontrak.
-4. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
-5. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
-6. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
-7. **Identitas komting, kelas, & kode booking pada model `Booking`/`Loan`:** Kontrak (§4.4, §4.5) hanya menyediakan `komting_id`, `projector_id`, dan `booking_id` (tanpa `komting_name`, `class_name`, `projector_name`, maupun `booking_code` pada `Loan`) serta belum menyediakan endpoint lookup komting untuk role `STAFF`. Frontend melakukan lookup proyektor via `/api/v1/projectors` / `/api/v1/projectors/{projector_id}` dan menampilkan fallback ID (`komting_id`, `booking_id`, `projector_id`) bila nama belum tersedia.
-8. **Skema respons `GET /api/v1/staff/dashboard`:** Kontrak (§7.4) belum menetapkan struktur JSON baku untuk ringkasan dashboard; `StaffDashboardSummary` memperlakukan seluruh ringkasan dan daftar secara opsional dengan fallback aman `"—"` serta empty/error retry state.
-9. **Open Decisions FE-1 & FE-2 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, batas waktu self-cancel komting, serta detail slot jadwal pada `GET /api/v1/availability`.
+1. **Endpoint manajemen akun STAFF belum tersedia di `API_CONTRACT_PINJAM.md` (`/admin/staff`):** Kontrak (v1.0.0) mengakui hak ADMIN mengelola akun STAFF (§3.2, §3.4), tetapi belum mendefinisikan endpoint, payload, filter/pagination, field yang diizinkan diedit, maupun error code untuk daftar, pembuatan manual, pembaruan, atau penonaktifan akun STAFF. Fitur CRUD akun STAFF belum dapat diimplementasikan tanpa melanggar batasan kontrak; `/admin/staff` menampilkan status gap ini secara eksplisit.
+2. **Mekanisme akses foto identitas privat (`/admin/applications/[id]`):** `API_CONTRACT_PINJAM.md` §6.3 & §17 belum mendefinisikan endpoint atau field URL bertanda tangan (*signed URL*) untuk foto identitas pendaftar. UI menampilkan informasi aman bahwa pratinjau dokumen menunggu mekanisme akses privat backend (tanpa URL publik atau fiktif).
+3. **Informasi komting aktif sebelumnya pada response detail replacement:** Kontrak §6.3–6.4 belum menetapkan field objek komting lama dalam `KomtingApplication`; UI membedakan alur replacement menggunakan `application_type` / `status` dan menampilkan data calon pengganti yang tersedia di kontrak.
+4. **Endpoint khusus dashboard ADMIN & daftar assignment komting belum ada di `API_CONTRACT_PINJAM.md`:** `/admin` saat ini mengombinasikan `GET /api/v1/staff/dashboard` dan `GET /api/v1/admin/komting/applications`; halaman `/admin/komting` dan `/admin/corrections` masih menunggu kejelasan kontrak.
+5. **Endpoint detail maintenance (`GET /api/v1/staff/maintenance/{maintenance_id}`):** Belum terdefinisi di `API_CONTRACT_PINJAM.md` §11. `StaffMaintenanceDetailView` melakukan pencarian berpaginasi via `GET /api/v1/staff/maintenance` dengan state loading, error, dan not-found; jika catatan berada melampaui batas halaman pencarian (`10` halaman × `20` item), diperlukan endpoint detail khusus di backend.
+6. **Validasi QR dengan `booking_code`:** `POST /api/v1/staff/qr/validate` menerima token `qr_payload` opaque, bukan `booking_code`. Pada `/staff/bookings/[id]`, staf memvalidasi menggunakan token QR atau melalui `/staff/scan`.
+7. **Relasi `loan_id` pada respons `RETURN` QR:** `API_CONTRACT_PINJAM.md` §9.2 belum menyertakan `loan_id` pada `QrValidationResponse.transaction`. Frontend tidak mengasumsikan `loan_id` dan mencari transaksi aktif via `GET /api/v1/staff/loans?status=ACTIVE` berdasarkan `booking_id`.
+8. **Identitas komting, kelas, & kode booking pada model `Booking`/`Loan`:** Kontrak (§4.4, §4.5) hanya menyediakan `komting_id`, `projector_id`, dan `booking_id` (tanpa `komting_name`, `class_name`, `projector_name`, maupun `booking_code` pada `Loan`) serta belum menyediakan endpoint lookup komting untuk role `STAFF`. Frontend melakukan lookup proyektor via `/api/v1/projectors` / `/api/v1/projectors/{projector_id}` dan menampilkan fallback ID (`komting_id`, `booking_id`, `projector_id`) bila nama belum tersedia.
+9. **Skema respons `GET /api/v1/staff/dashboard`:** Kontrak (§7.4) belum menetapkan struktur JSON baku untuk ringkasan dashboard; `StaffDashboardSummary` memperlakukan seluruh ringkasan dan daftar secara opsional dengan fallback aman `"—"` serta empty/error retry state.
+10. **Open Decisions FE-1 & FE-2 yang masih terbuka:** Provider autentikasi final, detail field/retensi upload foto, tenggat respons replacement komting, batas waktu self-cancel komting, serta detail slot jadwal pada `GET /api/v1/availability`.
 
 ---
 
-## 9. Backlog Sprint Berikutnya (FE-4.3+ — Modul ADMIN Lanjutan)
+## 9. Backlog Sprint Berikutnya (FE-4.5+ — Modul ADMIN Lanjutan)
 
-- Implementasi modul ADMIN lanjutan sesuai kesiapan kontrak: inventaris proyektor (`/admin/projectors`), jam operasional (`/admin/operating-hours`), audit log (`/admin/audit-logs`), serta modul yang masih menunggu finalisasi kontrak (`/admin/komting`, `/admin/staff`, `/admin/corrections`).
+- Implementasi modul ADMIN lanjutan sesuai kesiapan kontrak: jam operasional (`/admin/operating-hours`), audit log (`/admin/audit-logs`), serta modul yang masih menunggu finalisasi kontrak (`/admin/komting`, `/admin/staff` penuh setelah endpoint tersedia, `/admin/corrections`).
