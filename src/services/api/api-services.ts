@@ -71,12 +71,13 @@ export const apiServices: ServiceRegistry = {
         method: "POST",
         body: payload,
       }),
-    approveReplacement: (applicationId, payload) =>
+    approveReplacement: (applicationId, payload, idempotencyKey) =>
       apiRequest(
         `/admin/komting/applications/${encodeURIComponent(applicationId)}/approve-replacement`,
         {
           method: "POST",
           body: payload,
+          idempotencyKey,
         }
       ),
     deactivateAssignment: (assignmentId, payload) =>

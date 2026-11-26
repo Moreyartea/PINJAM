@@ -194,4 +194,29 @@ describe("RoleGuard", () => {
     expect(screen.getByText("Dashboard Admin")).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
   });
+
+  it("blocks STAFF from accessing /admin/applications and redirects to /forbidden", async () => {
+    mockPathname = "/admin/applications";
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "s1",
+        email: "staff@kampus.ac.id",
+        full_name: "Staff",
+        role: "STAFF",
+        account_status: "ACTIVE",
+      },
+    };
+
+    render(
+      <RoleGuard allowedRoles={["ADMIN"]}>
+        <div>Daftar Pengajuan Admin</div>
+      </RoleGuard>
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/forbidden");
+    });
+    expect(screen.queryByText("Daftar Pengajuan Admin")).not.toBeInTheDocument();
+  });
 });

@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard ADMIN", href: "/admin" },
-  { label: "Pengajuan Komting", href: "/admin/applications", badge: "Segera" },
+  { label: "Pengajuan Komting", href: "/admin/applications" },
   { label: "Assignment Komting", href: "/admin/komting", badge: "Segera" },
   { label: "Akun STAFF", href: "/admin/staff", badge: "Segera" },
   { label: "Inventaris Proyektor", href: "/admin/projectors", badge: "Segera" },

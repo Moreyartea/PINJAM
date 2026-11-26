@@ -15,6 +15,7 @@ import {
 import {
   createMockKomtingDashboard,
   MOCK_EMAIL_TO_ACCOUNT,
+  MOCK_SIMULATION_ADMIN_PENDING_NEW,
   MOCK_SIMULATION_APPLICATIONS,
   MOCK_SIMULATION_BOOKINGS,
   MOCK_SIMULATION_LOANS,
@@ -43,6 +44,11 @@ interface StoredMockSession {
 
 let memoryMockSession: StoredMockSession | null = null;
 let latestSubmittedMockApplication: KomtingApplication | null = null;
+const mockApplicationsStore: KomtingApplication[] = [
+  { ...MOCK_SIMULATION_ADMIN_PENDING_NEW },
+  ...Object.values(MOCK_SIMULATION_APPLICATIONS).map((app) => ({ ...app })),
+];
+const mockAdminIdempotencyStore = new Map<string, { payloadHash: string; result: unknown }>();
 const mockProjectorsStore: Projector[] = MOCK_SIMULATION_PROJECTORS.map((p) => ({ ...p }));
 const mockBookingsStore: Booking[] = MOCK_SIMULATION_BOOKINGS.map((b) => ({
   ...b,
@@ -303,6 +309,7 @@ export const mockServices: ServiceRegistry = {
           : null,
         rejection_reason: null,
       };
+      mockApplicationsStore.unshift({ ...latestSubmittedMockApplication });
 
       return wrapMockSingle({
         application_id: applicationId,
@@ -347,13 +354,9 @@ export const mockServices: ServiceRegistry = {
         return wrapMockList([], params?.page ?? 1, params?.page_size ?? 20);
       }
 
-      const baseItems = Object.values(MOCK_SIMULATION_APPLICATIONS);
-      const allItems = latestSubmittedMockApplication
-        ? [latestSubmittedMockApplication, ...baseItems]
-        : baseItems;
       const filtered = params?.status
-        ? allItems.filter((item) => item.status === params.status)
-        : allItems;
+        ? mockApplicationsStore.filter((item) => item.status === params.status)
+        : mockApplicationsStore;
 
       const page = params?.page ?? 1;
       const pageSize = params?.page_size ?? 20;
@@ -376,47 +379,170 @@ export const mockServices: ServiceRegistry = {
 
     async getAdminApplication(applicationId) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        application_id: applicationId,
-        status: "PENDING_VERIFICATION",
-        submitted_at: new Date().toISOString(),
-      });
+      requireAdminMock();
+      const found = mockApplicationsStore.find((app) => app.application_id === applicationId);
+      if (!found) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: pengajuan ${applicationId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      return wrapMockSingle(found);
     },
 
-    async approveApplication(applicationId) {
+    async approveApplication(applicationId, payload) {
       await simulateMockRequest();
+      requireAdminMock();
+      const index = mockApplicationsStore.findIndex((app) => app.application_id === applicationId);
+      const target = index >= 0 ? mockApplicationsStore[index] : undefined;
+      if (!target) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: pengajuan ${applicationId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      if (
+        (target.status !== "PENDING_VERIFICATION" && target.status !== "PENDING_REVIEW") ||
+        target.application_type === "REPLACEMENT"
+      ) {
+        throw new ApiClientError({
+          status: 409,
+          code: "APPLICATION_ALREADY_EXISTS",
+          message: "Status pengajuan saat ini tidak dapat disetujui melalui alur pengajuan baru.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      mockApplicationsStore[index] = {
+        ...target,
+        status: "APPROVED",
+        admin_note: payload.admin_note ?? null,
+      };
+      if (latestSubmittedMockApplication?.application_id === applicationId) {
+        latestSubmittedMockApplication = mockApplicationsStore[index];
+      }
+
       return wrapMockSingle({
         application_id: applicationId,
         status: "APPROVED",
         assignment: {
-          id: "sim_assignment_approved",
+          id: `sim_assignment_${Date.now().toString(36)}`,
           status: "ACTIVE",
-          class_name: "IF-01",
+          class_name: target.class_name ?? "IF-01",
         },
       });
     },
 
     async rejectApplication(applicationId, payload) {
       await simulateMockRequest();
-      return wrapMockSingle({
-        application_id: applicationId,
+      requireAdminMock();
+      const index = mockApplicationsStore.findIndex((app) => app.application_id === applicationId);
+      const target = index >= 0 ? mockApplicationsStore[index] : undefined;
+      if (!target) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: pengajuan ${applicationId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      if (
+        target.status !== "PENDING_VERIFICATION" &&
+        target.status !== "PENDING_REVIEW" &&
+        target.status !== "PENDING_REPLACEMENT_NOTICE"
+      ) {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_CONFLICT",
+          message: "Hanya pengajuan pending yang dapat ditolak.",
+          requestId: createMockRequestId(),
+        });
+      }
+      if (!payload.reason.trim()) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_INSPECTION_REQUIRED",
+          message: "Alasan penolakan wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      const updated: KomtingApplication = {
+        ...target,
         status: "REJECTED",
-        submitted_at: new Date().toISOString(),
-        rejection_reason: payload.reason,
-      });
+        rejection_reason: payload.reason.trim(),
+      };
+      mockApplicationsStore[index] = updated;
+      if (latestSubmittedMockApplication?.application_id === applicationId) {
+        latestSubmittedMockApplication = updated;
+      }
+      return wrapMockSingle(updated);
     },
 
-    async approveReplacement(applicationId) {
+    async approveReplacement(applicationId, payload, idempotencyKey) {
       await simulateMockRequest();
-      return wrapMockSingle({
+      requireAdminMock();
+
+      const payloadHash = JSON.stringify({ applicationId, payload });
+      const existing = mockAdminIdempotencyStore.get(`replacement:${idempotencyKey}`);
+      if (existing) {
+        if (existing.payloadHash !== payloadHash) {
+          throw new ApiClientError({
+            status: 409,
+            code: "IDEMPOTENCY_KEY_REUSED",
+            requestId: createMockRequestId(),
+          });
+        }
+        return wrapMockSingle(existing.result as never);
+      }
+
+      const index = mockApplicationsStore.findIndex((app) => app.application_id === applicationId);
+      const target = index >= 0 ? mockApplicationsStore[index] : undefined;
+      if (!target) {
+        throw new ApiClientError({
+          status: 404,
+          code: "PROJECTOR_NOT_FOUND",
+          message: `Simulasi: pengajuan ${applicationId} tidak ditemukan.`,
+          requestId: createMockRequestId(),
+        });
+      }
+      if (
+        target.status !== "PENDING_REPLACEMENT_NOTICE" &&
+        target.status !== "PENDING_VERIFICATION" &&
+        target.status !== "PENDING_REVIEW"
+      ) {
+        throw new ApiClientError({
+          status: 409,
+          code: "BOOKING_CONFLICT",
+          message: "Status pengajuan replacement ini sudah diproses atau tidak eligible.",
+          requestId: createMockRequestId(),
+        });
+      }
+
+      mockApplicationsStore[index] = {
+        ...target,
+        status: "APPROVED",
+        admin_note: payload.admin_note ?? null,
+      };
+      if (latestSubmittedMockApplication?.application_id === applicationId) {
+        latestSubmittedMockApplication = mockApplicationsStore[index];
+      }
+
+      const result = {
         application_id: applicationId,
         status: "APPROVED",
         assignment: {
-          id: "sim_assignment_replaced",
+          id: `sim_assignment_replaced_${Date.now().toString(36)}`,
           status: "ACTIVE",
-          class_name: "IF-01",
+          class_name: target.class_name ?? "IF-01",
         },
-      });
+      };
+      mockAdminIdempotencyStore.set(`replacement:${idempotencyKey}`, { payloadHash, result });
+      return wrapMockSingle(result);
     },
 
     async deactivateAssignment() {

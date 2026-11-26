@@ -87,7 +87,8 @@ export interface ApplicationService {
   ): Promise<ApiSingleResponse<KomtingApplication>>;
   approveReplacement(
     applicationId: string,
-    payload: { admin_note?: string | null }
+    payload: { admin_note?: string | null },
+    idempotencyKey: string
   ): Promise<
     ApiSingleResponse<{
       application_id: string;

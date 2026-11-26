@@ -151,8 +151,8 @@ export const MOCK_SIMULATION_APPLICATIONS: Record<string, KomtingApplication> = 
     full_name: "Simulasi Calon Komting",
     email: "calon.komting@simulasi.local",
     student_id: "SIM-2024002",
-    class_name: "IF-03",
-    application_type: "PENDING_REPLACEMENT_NOTICE",
+    class_name: "IF-01",
+    application_type: "REPLACEMENT",
     status: "PENDING_REPLACEMENT_NOTICE",
     submitted_at: "2026-11-26T07:05:00Z",
     admin_note: null,
@@ -170,6 +170,19 @@ export const MOCK_SIMULATION_APPLICATIONS: Record<string, KomtingApplication> = 
     admin_note: null,
     rejection_reason: "Contoh penolakan simulasi: foto kartu identitas kurang jelas.",
   },
+};
+
+export const MOCK_SIMULATION_ADMIN_PENDING_NEW: KomtingApplication = {
+  application_id: "sim_app_04",
+  full_name: "Simulasi Pendaftar Komting Baru",
+  email: "pendaftar.baru@simulasi.local",
+  student_id: "SIM-2024004",
+  class_name: "IF-04",
+  application_type: "NEW",
+  status: "PENDING_VERIFICATION",
+  submitted_at: "2026-11-26T08:30:00Z",
+  admin_note: null,
+  rejection_reason: null,
 };
 
 export const MOCK_SIMULATION_BOOKINGS: Booking[] = [
