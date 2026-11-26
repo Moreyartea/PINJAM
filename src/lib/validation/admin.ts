@@ -162,3 +162,17 @@ export function validateDeactivateAssignmentForm(values: {
   }
   return errors;
 }
+
+export interface UpdateMeValidationErrors {
+  fullName?: string;
+}
+
+export function validateUpdateMeForm(values: { fullName: string }): UpdateMeValidationErrors {
+  const errors: UpdateMeValidationErrors = {};
+  if (!values.fullName.trim()) {
+    errors.fullName = "Nama lengkap wajib diisi.";
+  } else if (values.fullName.trim().length < 2) {
+    errors.fullName = "Nama lengkap minimal 2 karakter.";
+  }
+  return errors;
+}

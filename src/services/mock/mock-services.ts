@@ -287,16 +287,23 @@ export const mockServices: ServiceRegistry = {
         });
       }
       const profile = resolveCurrentMockProfile();
-      return wrapMockSingle(profile);
+      return wrapMockSingle({ ...profile });
     },
 
     async updateMe(payload) {
       await simulateMockRequest();
       const profile = resolveCurrentMockProfile();
-      return wrapMockSingle({
-        ...profile,
-        full_name: payload.full_name,
-      });
+      const trimmed = payload.full_name.trim();
+      if (!trimmed) {
+        throw new ApiClientError({
+          status: 422,
+          code: "RETURN_INSPECTION_REQUIRED",
+          message: "Nama lengkap wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
+      profile.full_name = trimmed;
+      return wrapMockSingle({ ...profile });
     },
   },
 
