@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -31,6 +31,7 @@ import type { QrValidationResponse } from "@/services/contracts";
 import type { Booking, Projector } from "@/types/domain";
 
 export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
+  const validatingQrRef = useRef(false);
   const [qrInput, setQrInput] = useState("");
   const [qrInputError, setQrInputError] = useState<string | undefined>(undefined);
   const [validatingQr, setValidatingQr] = useState(false);
@@ -63,6 +64,8 @@ export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
 
   const handleValidateQr = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (validatingQrRef.current) return;
+
     setQrError(null);
     setQrValidation(null);
 
@@ -71,6 +74,7 @@ export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
       return;
     }
     setQrInputError(undefined);
+    validatingQrRef.current = true;
     setValidatingQr(true);
 
     try {
@@ -92,6 +96,7 @@ export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
     } catch (err) {
       setQrError(normalizeUnknownError(err).message);
     } finally {
+      validatingQrRef.current = false;
       setValidatingQr(false);
     }
   };
@@ -107,9 +112,16 @@ export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
   }
 
   if (error || !booking) {
+    const errorTitle =
+      error?.status === 404
+        ? "Booking Tidak Ditemukan"
+        : error?.status === 403
+          ? "Akses Ditolak"
+          : "Gagal Memuat Detail Booking";
+
     return (
       <ErrorState
-        title="Gagal Memuat Detail Booking"
+        title={errorTitle}
         message={error?.message ?? "Booking tidak ditemukan."}
         errorCode={error?.code}
         onRetry={reloadBooking}

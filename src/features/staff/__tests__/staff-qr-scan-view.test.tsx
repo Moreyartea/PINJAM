@@ -140,4 +140,94 @@ describe("StaffQrScanView", () => {
       page_size: 20,
     });
   });
+
+  it("handles camera permission denied (NotAllowedError) and shows informative fallback message", async () => {
+    const user = userEvent.setup();
+    const notAllowedError = new DOMException("Permission denied", "NotAllowedError");
+
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, "mediaDevices", {
+      writable: true,
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(notAllowedError),
+      },
+    });
+
+    render(<StaffQrScanView />);
+
+    await user.click(screen.getByRole("button", { name: "Aktifkan Kamera QR" }));
+
+    expect(
+      await screen.findByText(
+        /Izin kamera ditolak oleh pengguna atau browser. Berikan izin akses kamera/i
+      )
+    ).toBeInTheDocument();
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      writable: true,
+      value: originalMediaDevices,
+    });
+  });
+
+  it("handles camera device not found (NotFoundError) and suggests manual fallback", async () => {
+    const user = userEvent.setup();
+    const notFoundError = new DOMException("Requested device not found", "NotFoundError");
+
+    const originalMediaDevices = navigator.mediaDevices;
+    Object.defineProperty(navigator, "mediaDevices", {
+      writable: true,
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(notFoundError),
+      },
+    });
+
+    render(<StaffQrScanView />);
+
+    await user.click(screen.getByRole("button", { name: "Aktifkan Kamera QR" }));
+
+    expect(
+      await screen.findByText(/Perangkat kamera tidak ditemukan pada perangkat ini/i)
+    ).toBeInTheDocument();
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      writable: true,
+      value: originalMediaDevices,
+    });
+  });
+
+  it("renders server QR verification summary card and links to booking detail without mutating state", async () => {
+    const user = userEvent.setup();
+    validateQrMock.mockResolvedValueOnce({
+      data: {
+        valid: true,
+        action: "PICKUP",
+        transaction: {
+          booking_id: "bkg_verified_123",
+          booking_code: "BKG-20261127-V01",
+          komting_name: "Rizky Ramadhan",
+          class_name: "TI-3A",
+          projector_name: "BenQ MS560",
+          status: "CONFIRMED",
+        },
+        requires_confirmation: true,
+      },
+      meta: { request_id: "req_ver_card" },
+    });
+
+    render(<StaffQrScanView />);
+
+    await user.type(screen.getByLabelText(/Token QR/i), "opaque_token_card_test");
+    await user.click(screen.getByRole("button", { name: "Validasi Token QR" }));
+
+    expect(await screen.findByText("Hasil Verifikasi QR dari Server")).toBeInTheDocument();
+    expect(screen.getByText("BKG-20261127-V01")).toBeInTheDocument();
+    expect(screen.getByText("Rizky Ramadhan (TI-3A)")).toBeInTheDocument();
+    expect(screen.getAllByText("BenQ MS560").length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByText(/Scan QR ini hanya melakukan verifikasi di server dan/i)
+    ).toBeInTheDocument();
+
+    const detailLink = screen.getByRole("link", { name: /Buka Detail Booking/i });
+    expect(detailLink).toHaveAttribute("href", "/staff/bookings/bkg_verified_123");
+  });
 });

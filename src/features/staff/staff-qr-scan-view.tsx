@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { PageHeader } from "@/components/layout/app-shell";
-import { Badge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -62,6 +63,7 @@ export function StaffQrScanView() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanTimerRef = useRef<number | null>(null);
+  const validatingRef = useRef(false);
 
   const stopCamera = useCallback(() => {
     if (scanTimerRef.current !== null) {
@@ -84,6 +86,7 @@ export function StaffQrScanView() {
   }, [stopCamera]);
 
   const validateToken = useCallback(async (rawToken: string, targetAction: QRActionType) => {
+    if (validatingRef.current) return;
     const token = rawToken.trim();
     setValidationError(null);
     setValidationResult(null);
@@ -94,6 +97,7 @@ export function StaffQrScanView() {
       return;
     }
     setInputError(undefined);
+    validatingRef.current = true;
     setValidating(true);
 
     try {
@@ -124,6 +128,7 @@ export function StaffQrScanView() {
       setValidationError(normalizeUnknownError(err).message);
     } finally {
       setValidating(false);
+      validatingRef.current = false;
     }
   }, []);
 
@@ -185,9 +190,21 @@ export function StaffQrScanView() {
           // Ignore single frame decode error
         }
       }, 450);
-    } catch {
+    } catch (err: unknown) {
       stopCamera();
-      setCameraError("Izin kamera ditolak atau kamera tidak tersedia. Gunakan input token manual.");
+      const errorName = (err as { name?: string })?.name ?? "";
+      const errorMessage = (err as { message?: string })?.message ?? "kesalahan tidak diketahui";
+      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+        setCameraError(
+          "Izin kamera ditolak oleh pengguna atau browser. Berikan izin akses kamera di pengaturan browser atau gunakan input token manual."
+        );
+      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        setCameraError(
+          "Perangkat kamera tidak ditemukan pada perangkat ini. Gunakan input token manual."
+        );
+      } else {
+        setCameraError(`Gagal mengakses kamera (${errorMessage}). Gunakan input token manual.`);
+      }
     }
   };
 
@@ -312,12 +329,79 @@ export function StaffQrScanView() {
           </CardFooter>
         </Card>
 
-        <div>
+        <div className="space-y-6">
           {!validationResult && (
             <Alert tone="info" title="Menunggu Validasi QR">
               Pilih aksi <code>PICKUP</code> atau <code>RETURN</code>, lalu pindai atau masukkan
               token QR untuk menampilkan ringkasan dan formulir konfirmasi.
             </Alert>
+          )}
+
+          {validationResult && (
+            <Card className="border-2 border-[var(--color-primary)]">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle>Hasil Verifikasi QR dari Server</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge tone="success">VALID</Badge>
+                    <Badge tone="accent">{validationResult.action}</Badge>
+                  </div>
+                </div>
+                <CardDescription>
+                  Token diverifikasi oleh backend (<code>POST /api/v1/staff/qr/validate</code>).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                  <div>
+                    <span className="font-semibold text-xs uppercase tracking-wider block text-[var(--color-muted)]">
+                      Kode Booking
+                    </span>
+                    <span className="font-mono font-bold">
+                      {validationResult.transaction.booking_code}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-xs uppercase tracking-wider block text-[var(--color-muted)]">
+                      Peminjam
+                    </span>
+                    <span>
+                      {validationResult.transaction.komting_name} (
+                      {validationResult.transaction.class_name})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-xs uppercase tracking-wider block text-[var(--color-muted)]">
+                      Proyektor
+                    </span>
+                    <span className="font-semibold">
+                      {validationResult.transaction.projector_name}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-xs uppercase tracking-wider block text-[var(--color-muted)]">
+                      Status Transaksi
+                    </span>
+                    <div className="pt-0.5">
+                      <StatusBadge status={validationResult.transaction.status} />
+                    </div>
+                  </div>
+                </div>
+
+                <Alert tone="info" title="Verifikasi Selesai">
+                  Scan QR ini hanya melakukan verifikasi di server dan{" "}
+                  <strong>tidak mengubah status transaksi</strong>.
+                </Alert>
+              </CardContent>
+              <CardFooter className="flex justify-end pt-0">
+                <Link
+                  href={`/staff/bookings/${encodeURIComponent(validationResult.transaction.booking_id)}`}
+                  className="inline-flex items-center justify-center font-bold uppercase tracking-wider text-xs px-3 py-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-surface-subtle)] nb-border nb-shadow nb-interactive"
+                >
+                  Buka Detail Booking
+                </Link>
+              </CardFooter>
+            </Card>
           )}
 
           {validationResult && validationResult.action === "PICKUP" && (

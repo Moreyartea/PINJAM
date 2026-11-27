@@ -205,4 +205,97 @@ describe("Staff Booking Operations", () => {
       );
     });
   });
+
+  it("searches booking by database ID via getStaffBooking API and handles 404 cleanly", async () => {
+    const user = userEvent.setup();
+    listStaffBookingsMock.mockResolvedValueOnce({
+      data: [],
+      meta: {
+        request_id: "req_empty",
+        pagination: { page: 1, page_size: 10, total_items: 0, total_pages: 0 },
+      },
+    });
+
+    getStaffBookingMock.mockResolvedValueOnce({
+      data: {
+        id: "bkg_lookup_id",
+        booking_code: "BKG-20261127-888",
+        komting_id: "u2",
+        projector_id: "prj_1",
+        booking_date: "2026-11-27",
+        start_time: "10:00:00",
+        estimated_return_at: "2026-11-27T06:00:00Z",
+        status: "CONFIRMED",
+        pickup_window: {
+          opens_at: "2026-11-27T02:30:00Z",
+          closes_at: "2026-11-27T03:15:00Z",
+        },
+        created_at: "2026-11-27T02:00:00Z",
+      },
+      meta: { request_id: "req_lookup" },
+    });
+
+    render(<StaffBookingListView />);
+
+    const searchInput = screen.getByLabelText(/Identifier Booking/i);
+    await user.type(searchInput, "bkg_lookup_id");
+    await user.click(screen.getByRole("button", { name: "Cari Booking" }));
+
+    expect(getStaffBookingMock).toHaveBeenCalledWith("bkg_lookup_id");
+    expect(await screen.findByText("ID: bkg_lookup_id")).toBeInTheDocument();
+    expect(screen.getByText("BKG-20261127-888")).toBeInTheDocument();
+    expect(screen.getByText("Lihat Detail & Proses Booking")).toBeInTheDocument();
+
+    // Reset search
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.queryByText("ID: bkg_lookup_id")).not.toBeInTheDocument();
+  });
+
+  it("searches booking by booking code in loaded list or shows Contract Gap notice if not loaded", async () => {
+    const user = userEvent.setup();
+    listStaffBookingsMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "bkg_in_list",
+          booking_code: "BKG-LOADED-01",
+          komting_id: "u3",
+          projector_id: "prj_1",
+          booking_date: "2026-11-27",
+          start_time: "13:00:00",
+          estimated_return_at: "2026-11-27T08:00:00Z",
+          status: "CONFIRMED",
+          pickup_window: {
+            opens_at: "2026-11-27T05:30:00Z",
+            closes_at: "2026-11-27T06:15:00Z",
+          },
+          created_at: "2026-11-27T05:00:00Z",
+        },
+      ],
+      meta: {
+        request_id: "req_loaded",
+        pagination: { page: 1, page_size: 10, total_items: 1, total_pages: 1 },
+      },
+    });
+
+    render(<StaffBookingListView />);
+    expect(await screen.findByText("BKG-LOADED-01")).toBeInTheDocument();
+
+    const searchInput = screen.getByLabelText(/Identifier Booking/i);
+
+    // 1. Matched in loaded list
+    await user.type(searchInput, "BKG-LOADED-01");
+    await user.click(screen.getByRole("button", { name: "Cari Booking" }));
+    expect(await screen.findByText("ID: bkg_in_list")).toBeInTheDocument();
+    expect(screen.getByText("Lihat Detail & Proses Booking")).toBeInTheDocument();
+
+    // 2. Not found in loaded list -> Contract gap notice
+    await user.clear(searchInput);
+    await user.type(searchInput, "BKG-NOT-LOADED-99");
+    await user.click(screen.getByRole("button", { name: "Cari Booking" }));
+
+    expect(
+      await screen.findByText(/tidak ditemukan pada daftar aktif yang dimuat/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Contract Gap untuk pencarian kode server-side/i)).toBeInTheDocument();
+  });
 });

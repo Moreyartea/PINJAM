@@ -859,6 +859,256 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
     });
   });
 
+  describe("STAFF Booking Operations & QR Verification (GET /staff/bookings, GET /staff/bookings/{id}, POST /staff/qr/validate)", () => {
+    it("lists staff bookings with query filters (date, status, page, page_size) and Bearer token", async () => {
+      const mockBookings: Booking[] = [
+        {
+          id: "bkg_staff_001",
+          booking_code: "BKG-20261127-001",
+          komting_id: "usr_komting_1",
+          projector_id: "prj_001",
+          booking_date: "2026-11-27",
+          start_time: "08:00:00",
+          estimated_return_at: "2026-11-27T04:00:00Z",
+          status: "CONFIRMED",
+          pickup_window: {
+            opens_at: "2026-11-27T00:30:00Z",
+            closes_at: "2026-11-27T01:15:00Z",
+          },
+          created_at: "2026-11-27T00:00:00Z",
+        },
+      ];
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: mockBookings,
+            meta: {
+              request_id: "req_staff_bkg_list",
+              pagination: {
+                page: 1,
+                page_size: 20,
+                total_items: 1,
+                total_pages: 1,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+      const result = await apiServices.booking.listStaffBookings({
+        date: "2026-11-27",
+        status: "CONFIRMED",
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/staff/bookings");
+      expect(url).toContain("date=2026-11-27");
+      expect(url).toContain("status=CONFIRMED");
+      expect(url).toContain("page=1");
+      expect(url).toContain("page_size=20");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Accept")).toBe("application/json");
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.booking_code).toBe("BKG-20261127-001");
+      expect(result.meta.pagination.total_items).toBe(1);
+    });
+
+    it("gets staff booking detail with URL encoding and handles 404 BOOKING_NOT_FOUND and 403 FORBIDDEN", async () => {
+      // 1. Success case
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "bkg/staff#special",
+              booking_code: "BKG-20261127-002",
+              komting_id: "usr_komting_2",
+              projector_id: "prj_002",
+              booking_date: "2026-11-27",
+              start_time: "10:00:00",
+              estimated_return_at: "2026-11-27T06:00:00Z",
+              status: "CONFIRMED",
+              pickup_window: {
+                opens_at: "2026-11-27T02:30:00Z",
+                closes_at: "2026-11-27T03:15:00Z",
+              },
+              created_at: "2026-11-27T02:00:00Z",
+            },
+            meta: { request_id: "req_staff_bkg_detail" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const res = await apiServices.booking.getStaffBooking("bkg/staff#special");
+      const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/bookings/bkg%2Fstaff%23special");
+      expect(res.data.booking_code).toBe("BKG-20261127-002");
+
+      // 2. 404 BOOKING_NOT_FOUND
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "BOOKING_NOT_FOUND",
+              message: "Data booking tidak ditemukan di sistem.",
+            },
+            meta: { request_id: "req_staff_bkg_404" },
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.getStaffBooking("non_existent_bkg");
+        expect.unreachable("Should have failed with 404");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(404);
+        expect(apiErr.code).toBe("BOOKING_NOT_FOUND");
+      }
+
+      // 3. 403 FORBIDDEN
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "FORBIDDEN",
+              message: "Akses dibatasi hanya untuk staf operasional atau admin.",
+            },
+            meta: { request_id: "req_staff_bkg_403" },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.getStaffBooking("bkg_forbidden");
+        expect.unreachable("Should have failed with 403");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.code).toBe("FORBIDDEN");
+      }
+    });
+
+    it("validates QR token at POST /api/v1/staff/qr/validate and parses valid transaction payload", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              valid: true,
+              action: "PICKUP",
+              transaction: {
+                booking_id: "bkg_val_001",
+                booking_code: "BKG-20261127-003",
+                komting_name: "Ahmad Dahlan",
+                class_name: "IF-3B",
+                projector_name: "Epson EB-X500",
+                status: "CONFIRMED",
+              },
+              requires_confirmation: true,
+            },
+            meta: { request_id: "req_qr_validate_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.qr.validateQr({
+        qr_payload: "opaque_qr_sample_jwt_or_hash",
+        action: "PICKUP",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/qr/validate");
+      expect(options.method).toBe("POST");
+      expect(JSON.parse(options.body as string)).toEqual({
+        qr_payload: "opaque_qr_sample_jwt_or_hash",
+        action: "PICKUP",
+      });
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data.valid).toBe(true);
+      expect(result.data.action).toBe("PICKUP");
+      expect(result.data.transaction.booking_code).toBe("BKG-20261127-003");
+      expect(result.data.transaction.komting_name).toBe("Ahmad Dahlan");
+    });
+
+    it("handles invalid or expired QR response from server (e.g. 400 QR_INVALID / QR_EXPIRED)", async () => {
+      // 1. QR_EXPIRED
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "QR_EXPIRED",
+              message: "Token QR telah kedaluwarsa. Minta komting memuat ulang halaman booking.",
+            },
+            meta: { request_id: "req_qr_expired" },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.qr.validateQr({
+          qr_payload: "expired_token",
+          action: "PICKUP",
+        });
+        expect.unreachable("Should have failed with 400 QR_EXPIRED");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(400);
+        expect(apiErr.code).toBe("QR_EXPIRED");
+      }
+
+      // 2. QR_INVALID
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "QR_INVALID",
+              message: "Token QR tidak valid atau tanda tangan digital salah.",
+            },
+            meta: { request_id: "req_qr_invalid" },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.qr.validateQr({
+          qr_payload: "tampered_token",
+          action: "RETURN",
+        });
+        expect.unreachable("Should have failed with 400 QR_INVALID");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(400);
+        expect(apiErr.code).toBe("QR_INVALID");
+      }
+    });
+  });
+
   describe("Network and Transport Resilience", () => {
     it("handles network failure and maps cleanly to ApiClientError", async () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("Failed to fetch"));
