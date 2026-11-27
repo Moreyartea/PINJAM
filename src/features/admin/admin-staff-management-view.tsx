@@ -294,6 +294,19 @@ export function AdminStaffManagementView() {
                 <code>RoleGuard</code> frontend tidak menggantikan otorisasi backend.
               </p>
             </div>
+
+            <div className="p-3 nb-border rounded-[var(--radius-sm)] bg-[var(--color-bg)] space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-bold">4. Dokumen Proposal Spesifikasi RFC</p>
+                <Badge tone="primary">Dokumen Tersedia</Badge>
+              </div>
+              <p className="text-[var(--color-muted)]">
+                Proposal arsitektur lengkap telah disusun di{" "}
+                <code className="font-bold">FRONTEND_STAFF_MANAGEMENT_API_GAP.md</code>, memuat
+                rancangan endpoint GET/POST/PATCH, relasi Supabase Auth Admin API dengan{" "}
+                <code>public.users</code>, skema audit log, dan penanganan error.
+              </p>
+            </div>
           </CardContent>
           <CardFooter className="text-xs text-[var(--color-muted)]">
             Akses modul STAFF di UI tidak pernah menyediakan fitur pengelolaan akun ADMIN atau

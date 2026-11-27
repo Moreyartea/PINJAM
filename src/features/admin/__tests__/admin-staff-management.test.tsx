@@ -131,4 +131,47 @@ describe("AdminStaffManagementView", () => {
       expect(screen.getByText("Profil Diperbarui")).toBeInTheDocument();
     });
   });
+
+  it("references FRONTEND_STAFF_MANAGEMENT_API_GAP.md and explains the contract status", async () => {
+    getMeMock.mockResolvedValueOnce({
+      data: ADMIN_PROFILE,
+      meta: { request_id: "req_me_gap" },
+    });
+
+    render(<AdminStaffManagementView />);
+
+    expect(await screen.findByText(/Dokumen Proposal Spesifikasi RFC/i)).toBeInTheDocument();
+    expect(screen.getByText(/FRONTEND_STAFF_MANAGEMENT_API_GAP\.md/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\. Daftar Akun STAFF, Pencarian & Pagination/i)).toBeInTheDocument();
+    expect(screen.getByText(/2\. Pembuatan & Edit Akun STAFF oleh ADMIN/i)).toBeInTheDocument();
+    expect(screen.getByText(/3\. Aktivasi, Penonaktifan & Batasan Role/i)).toBeInTheDocument();
+  });
+
+  it("handles 422 validation error from backend on updateMe cleanly", async () => {
+    const user = userEvent.setup();
+    getMeMock.mockResolvedValueOnce({
+      data: ADMIN_PROFILE,
+      meta: { request_id: "req_me_val" },
+    });
+    updateMeMock.mockRejectedValueOnce(
+      new ApiClientError({
+        status: 422,
+        code: "VALIDATION_ERROR",
+        message: "Nama mengandung karakter terlarang.",
+      })
+    );
+
+    render(<AdminStaffManagementView />);
+
+    const nameInput = await screen.findByLabelText(/Nama Lengkap Profil Sendiri/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, "Admin <script>");
+    await user.click(screen.getByRole("button", { name: "Simpan Nama Profil" }));
+
+    const confirmBtn = await screen.findByRole("button", { name: "Ya, Perbarui Nama" });
+    await user.click(confirmBtn);
+
+    expect(await screen.findByText("Gagal Memperbarui Profil")).toBeInTheDocument();
+    expect(screen.getByText("Nama mengandung karakter terlarang.")).toBeInTheDocument();
+  });
 });
