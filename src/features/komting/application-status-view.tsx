@@ -74,7 +74,7 @@ function getStatusGuidance(status: string): {
 }
 
 export function ApplicationStatusView() {
-  const { status: authStatus, user } = useAuth();
+  const { status: authStatus, user, refreshMe } = useAuth();
   const isAuthenticated = authStatus === "authenticated";
 
   const {
@@ -90,6 +90,11 @@ export function ApplicationStatusView() {
     [isAuthenticated],
     { enabled: isAuthenticated }
   );
+
+  const handleReload = async () => {
+    await reload();
+    await refreshMe?.();
+  };
 
   if (authStatus === "loading") {
     return (
@@ -254,7 +259,7 @@ export function ApplicationStatusView() {
         </CardContent>
 
         <CardFooter className="justify-between">
-          <Button variant="outline" size="sm" onClick={reload}>
+          <Button variant="outline" size="sm" onClick={handleReload}>
             Muat Ulang Status
           </Button>
           <div className="flex flex-wrap gap-2">
@@ -271,6 +276,17 @@ export function ApplicationStatusView() {
                   Buka Dashboard Komting
                 </Button>
               </Link>
+            )}
+            {application.status === "APPROVED" && user?.role !== "KOMTING" && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  await refreshMe?.();
+                }}
+              >
+                Sinkronkan Sesi Akun
+              </Button>
             )}
           </div>
         </CardFooter>

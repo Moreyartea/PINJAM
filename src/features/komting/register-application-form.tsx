@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ export function RegisterApplicationForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<SubmissionSuccess | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -78,6 +79,7 @@ export function RegisterApplicationForm() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submittingRef.current) return;
     setSubmitError(null);
 
     const errors = validateKomtingApplicationForm({
@@ -101,6 +103,7 @@ export function RegisterApplicationForm() {
     formData.append("class_name", className.trim());
     formData.append("identity_photo", identityPhoto);
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const response = await services.application.submitApplication(formData);
@@ -121,6 +124,7 @@ export function RegisterApplicationForm() {
       setSubmitError(normalized.message);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

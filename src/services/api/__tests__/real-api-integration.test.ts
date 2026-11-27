@@ -1770,6 +1770,415 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
     });
   });
 
+  describe("KOMTING Application & ADMIN Verification (POST /komting/applications, GET /komting/applications/me, GET/POST /admin/komting/applications)", () => {
+    it("submits komting application using FormData without manual Content-Type header", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app_001",
+              status: "PENDING_VERIFICATION",
+              submitted_at: "2026-11-27T08:00:00Z",
+            },
+            meta: { request_id: "req_app_submit" },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const formData = new FormData();
+      formData.append("full_name", "Ahmad Fauzi");
+      formData.append("email", "ahmad@kampus.ac.id");
+      formData.append("student_id", "240101001");
+      formData.append("class_name", "IF-01");
+      const mockFile = new Blob(["dummy photo bytes"], { type: "image/png" });
+      formData.append("identity_photo", mockFile, "ktm.png");
+
+      const result = await apiServices.application.submitApplication(formData);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/komting/applications");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      // Critical per API Contract §17 & spec: do not force application/json on FormData
+      expect(headers.get("Content-Type")).toBeNull();
+
+      expect(result.data.application_id).toBe("app_001");
+      expect(result.data.status).toBe("PENDING_VERIFICATION");
+    });
+
+    it("handles 409 conflict when class already has active komting or student already assigned", async () => {
+      // 1. CLASS_ALREADY_HAS_ACTIVE_KOMTING
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "CLASS_ALREADY_HAS_ACTIVE_KOMTING",
+              message: "Kelas sudah memiliki komting aktif.",
+            },
+            meta: { request_id: "req_app_conflict_class" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const formData1 = new FormData();
+      formData1.append("full_name", "Ahmad");
+      formData1.append("email", "ahmad@kampus.ac.id");
+      formData1.append("student_id", "240101001");
+      formData1.append("class_name", "IF-01");
+
+      try {
+        await apiServices.application.submitApplication(formData1);
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("CLASS_ALREADY_HAS_ACTIVE_KOMTING");
+      }
+
+      // 2. STUDENT_ALREADY_HAS_ACTIVE_ASSIGNMENT
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "STUDENT_ALREADY_HAS_ACTIVE_ASSIGNMENT",
+              message: "Mahasiswa sudah memiliki penugasan komting aktif.",
+            },
+            meta: { request_id: "req_app_conflict_student" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.application.submitApplication(formData1);
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("STUDENT_ALREADY_HAS_ACTIVE_ASSIGNMENT");
+      }
+    });
+
+    it("gets applicant own application status and handles 404 when not found", async () => {
+      // 1. Success case
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app_rep_001",
+              full_name: "Budi Pengganti",
+              email: "budi@kampus.ac.id",
+              student_id: "240101002",
+              class_name: "IF-02",
+              application_type: "REPLACEMENT",
+              status: "PENDING_REPLACEMENT_NOTICE",
+              submitted_at: "2026-11-27T08:30:00Z",
+              admin_note: null,
+              rejection_reason: null,
+            },
+            meta: { request_id: "req_my_app" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.getMyApplication();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/komting/applications/me");
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data.application_id).toBe("app_rep_001");
+      expect(result.data.application_type).toBe("REPLACEMENT");
+      expect(result.data.status).toBe("PENDING_REPLACEMENT_NOTICE");
+
+      // 2. 404 Not Found case
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "APPLICATION_NOT_FOUND",
+              message: "Belum ada pengajuan komting untuk akun ini.",
+            },
+            meta: { request_id: "req_app_404" },
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.application.getMyApplication();
+        expect.unreachable("Should have failed with 404");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(404);
+        expect(apiErr.code).toBe("APPLICATION_NOT_FOUND");
+      }
+    });
+
+    it("lists admin applications with status filter and pagination query", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                application_id: "app_001",
+                full_name: "Siti Rahma",
+                email: "siti@kampus.ac.id",
+                student_id: "240101003",
+                class_name: "IF-03",
+                application_type: "NEW",
+                status: "PENDING_VERIFICATION",
+                submitted_at: "2026-11-27T07:00:00Z",
+              },
+            ],
+            meta: {
+              request_id: "req_admin_app_list",
+              pagination: {
+                page: 1,
+                page_size: 20,
+                total_items: 1,
+                total_pages: 1,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.listAdminApplications({
+        status: "PENDING_VERIFICATION",
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/applications");
+      expect(url).toContain("status=PENDING_VERIFICATION");
+      expect(url).toContain("page=1");
+      expect(url).toContain("page_size=20");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.class_name).toBe("IF-03");
+    });
+
+    it("gets admin application detail with URL encoding and handles 404 and 403", async () => {
+      // 1. Success case with special characters in ID
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app/spec#1",
+              full_name: "Calon Khusus",
+              email: "khusus@kampus.ac.id",
+              student_id: "240101099",
+              class_name: "IF-SP",
+              application_type: "NEW",
+              status: "PENDING_VERIFICATION",
+              submitted_at: "2026-11-27T08:00:00Z",
+              admin_note: null,
+              rejection_reason: null,
+            },
+            meta: { request_id: "req_app_detail" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.getAdminApplication("app/spec#1");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/applications/app%2Fspec%231");
+      expect(result.data.application_id).toBe("app/spec#1");
+
+      // 2. 403 Forbidden case
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "FORBIDDEN",
+              message: "Hanya role ADMIN yang dapat melihat detail verifikasi pendaftaran.",
+            },
+            meta: { request_id: "req_app_forbidden" },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.application.getAdminApplication("app_forbidden");
+        expect.unreachable("Should have failed with 403");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.code).toBe("FORBIDDEN");
+      }
+    });
+
+    it("approves new application and parses created assignment", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app_001",
+              status: "APPROVED",
+              assignment: {
+                id: "asgn_001",
+                status: "ACTIVE",
+                class_name: "IF-01",
+              },
+            },
+            meta: { request_id: "req_app_approve" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.approveApplication("app_001", {
+        admin_note: "Identitas terverifikasi lengkap.",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/applications/app_001/approve");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(JSON.parse(options.body as string)).toEqual({
+        admin_note: "Identitas terverifikasi lengkap.",
+      });
+
+      expect(result.data.status).toBe("APPROVED");
+      expect(result.data.assignment.id).toBe("asgn_001");
+      expect(result.data.assignment.class_name).toBe("IF-01");
+    });
+
+    it("rejects application with mandatory reason", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app_001",
+              full_name: "Ahmad Fauzi",
+              class_name: "IF-01",
+              application_type: "NEW",
+              status: "REJECTED",
+              submitted_at: "2026-11-27T08:00:00Z",
+              rejection_reason: "Foto identitas buram dan tidak terbaca.",
+            },
+            meta: { request_id: "req_app_reject" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.rejectApplication("app_001", {
+        reason: "Foto identitas buram dan tidak terbaca.",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/applications/app_001/reject");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(JSON.parse(options.body as string)).toEqual({
+        reason: "Foto identitas buram dan tidak terbaca.",
+      });
+
+      expect(result.data.status).toBe("REJECTED");
+      expect(result.data.rejection_reason).toBe("Foto identitas buram dan tidak terbaca.");
+    });
+
+    it("approves replacement atomically using Idempotency-Key header", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              application_id: "app_rep_001",
+              status: "APPROVED",
+              assignment: {
+                id: "asgn_rep_002",
+                status: "ACTIVE",
+                class_name: "IF-02",
+              },
+            },
+            meta: { request_id: "req_rep_approve" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.approveReplacement(
+        "app_rep_001",
+        { admin_note: "Pergantian resmi komting IF-02 disetujui." },
+        "idemp_rep_token_xyz"
+      );
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/applications/app_rep_001/approve-replacement");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Idempotency-Key")).toBe("idemp_rep_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+
+      expect(result.data.status).toBe("APPROVED");
+      expect(result.data.assignment.id).toBe("asgn_rep_002");
+    });
+
+    it("deactivates active assignment with reason", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              success: true,
+              message: "Penugasan komting berhasil dinonaktifkan.",
+            },
+            meta: { request_id: "req_deact" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.application.deactivateAssignment("asgn_001", {
+        reason: "Mahasiswa mengundurkan diri sebagai komting.",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/admin/komting/assignments/asgn_001/deactivate");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+
+      expect(result.data.success).toBe(true);
+    });
+  });
+
   describe("Network and Transport Resilience", () => {
     it("handles network failure and maps cleanly to ApiClientError", async () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("Failed to fetch"));
@@ -1835,6 +2244,14 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
       expect(typeof apiServices.loan.listStaffLoans).toBe("function");
       expect(typeof apiServices.qr.validateQr).toBe("function");
       expect(typeof apiServices.maintenance.listMaintenance).toBe("function");
+      expect(typeof apiServices.application.submitApplication).toBe("function");
+      expect(typeof apiServices.application.getMyApplication).toBe("function");
+      expect(typeof apiServices.application.listAdminApplications).toBe("function");
+      expect(typeof apiServices.application.getAdminApplication).toBe("function");
+      expect(typeof apiServices.application.approveApplication).toBe("function");
+      expect(typeof apiServices.application.rejectApplication).toBe("function");
+      expect(typeof apiServices.application.approveReplacement).toBe("function");
+      expect(typeof apiServices.application.deactivateAssignment).toBe("function");
     });
   });
 });

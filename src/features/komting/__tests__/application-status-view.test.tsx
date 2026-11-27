@@ -106,4 +106,32 @@ describe("ApplicationStatusView", () => {
 
     expect(await screen.findByText("Belum Ada Pengajuan Komting")).toBeInTheDocument();
   });
+
+  it("renders session sync button when status is APPROVED but user role is not yet KOMTING", async () => {
+    mockAuth = {
+      status: "authenticated",
+      user: {
+        id: "u1",
+        email: "calon@kampus.ac.id",
+        full_name: "Calon Komting",
+        role: "GUEST" as unknown as "KOMTING",
+        account_status: "PENDING_VERIFICATION",
+      },
+    };
+
+    getMyApplicationMock.mockResolvedValueOnce({
+      data: {
+        application_id: "app_apprv_1",
+        class_name: "IF-01",
+        status: "APPROVED",
+        submitted_at: "2026-11-26T07:00:00Z",
+      },
+      meta: { request_id: "req_apprv" },
+    });
+
+    render(<ApplicationStatusView />);
+
+    expect(await screen.findByText("Pengajuan Disetujui")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sinkronkan Sesi Akun" })).toBeInTheDocument();
+  });
 });
