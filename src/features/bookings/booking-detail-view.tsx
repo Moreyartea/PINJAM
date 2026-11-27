@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -27,6 +27,7 @@ import {
   formatJakartaTimeOnly,
   formatLocalTime,
 } from "@/lib/utils/date";
+import { createIdempotencyKey } from "@/lib/utils/idempotency";
 import { validateCancelReason } from "@/lib/validation/booking";
 import { isMockMode, services } from "@/services";
 import type { Booking, Projector } from "@/types/domain";
@@ -38,6 +39,9 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
   const [cancelSubmitError, setCancelSubmitError] = useState<string | null>(null);
   const [cancelSuccessMessage, setCancelSuccessMessage] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  const cancellingRef = useRef(false);
+  const cancelIdempotencyRef = useRef<string | null>(null);
 
   const {
     data: booking,
@@ -78,6 +82,8 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
   );
 
   const handleConfirmCancel = async () => {
+    if (cancellingRef.current) return;
+
     setCancelSubmitError(null);
     const validationError = validateCancelReason(cancelReason);
     setCancelReasonError(validationError);
@@ -85,19 +91,30 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
       return;
     }
 
+    if (!cancelIdempotencyRef.current) {
+      cancelIdempotencyRef.current = createIdempotencyKey();
+    }
+
+    cancellingRef.current = true;
     setIsCancelling(true);
     try {
-      await services.booking.cancelKomtingBooking(bookingId, {
-        reason: cancelReason.trim(),
-      });
+      await services.booking.cancelKomtingBooking(
+        bookingId,
+        {
+          reason: cancelReason.trim(),
+        },
+        cancelIdempotencyRef.current
+      );
       setCancelOpen(false);
       setCancelReason("");
+      cancelIdempotencyRef.current = null;
       setCancelSuccessMessage("Booking berhasil dibatalkan.");
       reloadBooking();
     } catch (err) {
       const normalized = normalizeUnknownError(err);
       setCancelSubmitError(normalized.message);
     } finally {
+      cancellingRef.current = false;
       setIsCancelling(false);
     }
   };
@@ -113,9 +130,16 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
   }
 
   if (error || !booking) {
+    const errorTitle =
+      error?.status === 404
+        ? "Booking Tidak Ditemukan"
+        : error?.status === 403
+          ? "Akses Ditolak"
+          : "Gagal Memuat Detail Booking";
+
     return (
       <ErrorState
-        title="Gagal Memuat Detail Booking"
+        title={errorTitle}
         message={error?.message ?? "Data booking tidak ditemukan."}
         errorCode={error?.code}
         onRetry={reloadBooking}
@@ -233,6 +257,7 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
                 onClick={() => {
                   setCancelSubmitError(null);
                   setCancelReasonError(undefined);
+                  cancelIdempotencyRef.current = createIdempotencyKey();
                   setCancelOpen(true);
                 }}
               >
@@ -256,7 +281,10 @@ export function BookingDetailView({ bookingId }: { bookingId: string }) {
       <ConfirmDialog
         open={cancelOpen}
         onClose={() => {
-          if (!isCancelling) setCancelOpen(false);
+          if (!isCancelling) {
+            cancelIdempotencyRef.current = null;
+            setCancelOpen(false);
+          }
         }}
         onConfirm={handleConfirmCancel}
         title="Batalkan Booking?"

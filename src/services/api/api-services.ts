@@ -129,10 +129,11 @@ export const apiServices: ServiceRegistry = {
       }),
     getKomtingBooking: (bookingId) =>
       apiRequest(`/komting/bookings/${encodeURIComponent(bookingId)}`),
-    cancelKomtingBooking: (bookingId, payload) =>
+    cancelKomtingBooking: (bookingId, payload, idempotencyKey) =>
       apiRequest(`/komting/bookings/${encodeURIComponent(bookingId)}/cancel`, {
         method: "POST",
         body: payload,
+        idempotencyKey,
       }),
     listStaffBookings: (params) =>
       apiRequest("/staff/bookings", {

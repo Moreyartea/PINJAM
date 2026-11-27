@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setAccessTokenProvider } from "@/lib/api/client";
 import { ApiClientError } from "@/lib/api/errors";
 import { apiServices } from "@/services/api/api-services";
-import type { AvailabilityResult, OperatingHoursSnapshot, Projector } from "@/types/domain";
+import type { CreateBookingPayload } from "@/services/contracts";
+import type {
+  AvailabilityResult,
+  Booking,
+  OperatingHoursSnapshot,
+  Projector,
+} from "@/types/domain";
 
 describe("Real API Service Integration (Contract-Compliant)", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
@@ -453,6 +459,403 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
 
       expect(maintResult.data.physical_status).toBe("MAINTENANCE");
       expect(maintResult.data.is_bookable).toBe(false);
+    });
+  });
+
+  describe("KOMTING Booking Lifecycle (POST /bookings, GET /komting/bookings, GET /komting/bookings/{id}, POST /cancel, GET /qr)", () => {
+    it("creates booking with required payload fields, Bearer token, and Idempotency-Key", async () => {
+      const mockCreatedBooking: Booking = {
+        id: "bkg_new_001",
+        booking_code: "BKG-20261127-001",
+        komting_id: "user_komting_1",
+        projector_id: "prj_001",
+        booking_date: "2026-11-27",
+        start_time: "09:00:00",
+        estimated_return_at: "2026-11-27T04:00:00Z",
+        status: "CONFIRMED",
+        pickup_window: {
+          opens_at: "2026-11-27T01:30:00Z",
+          closes_at: "2026-11-27T02:15:00Z",
+        },
+        created_at: "2026-11-26T12:00:00Z",
+      };
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: mockCreatedBooking,
+            meta: { request_id: "req_create_bkg" },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const payload: CreateBookingPayload = {
+        projector_id: "prj_001",
+        booking_date: "2026-11-27",
+        start_time: "09:00:00",
+        estimated_return_at: "2026-11-27T04:00:00Z",
+      };
+      const idempotencyKey = "idemp_test_key_abc123";
+
+      const result = await apiServices.booking.createBooking(payload, idempotencyKey);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/bookings");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Idempotency-Key")).toBe("idemp_test_key_abc123");
+      expect(headers.get("Content-Type")).toBe("application/json");
+
+      expect(JSON.parse(options.body as string)).toEqual({
+        projector_id: "prj_001",
+        booking_date: "2026-11-27",
+        start_time: "09:00:00",
+        estimated_return_at: "2026-11-27T04:00:00Z",
+      });
+
+      expect(result.data.id).toBe("bkg_new_001");
+      expect(result.data.status).toBe("CONFIRMED");
+      expect(result.data.pickup_window.opens_at).toBe("2026-11-27T01:30:00Z");
+    });
+
+    it("handles booking creation errors: 400 invalid time, 409 conflict, and 422 validation", async () => {
+      // 1. 409 BOOKING_CONFLICT
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "BOOKING_CONFLICT",
+              message: "Jadwal proyektor bertabrakan atau unit tidak tersedia.",
+            },
+            meta: { request_id: "req_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.createBooking(
+          {
+            projector_id: "prj_001",
+            booking_date: "2026-11-27",
+            start_time: "09:00:00",
+            estimated_return_at: "2026-11-27T04:00:00Z",
+          },
+          "key_1"
+        );
+        expect.unreachable("Should have failed with 409 BOOKING_CONFLICT");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("BOOKING_CONFLICT");
+      }
+
+      // 2. 409 ACTIVE_BOOKING_EXISTS
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "ACTIVE_BOOKING_EXISTS",
+              message: "Anda masih memiliki booking aktif.",
+            },
+            meta: { request_id: "req_active" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.createBooking(
+          {
+            projector_id: "prj_002",
+            booking_date: "2026-11-27",
+            start_time: "10:00:00",
+            estimated_return_at: "2026-11-27T05:00:00Z",
+          },
+          "key_2"
+        );
+        expect.unreachable("Should have failed with 409 ACTIVE_BOOKING_EXISTS");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("ACTIVE_BOOKING_EXISTS");
+      }
+
+      // 3. 422 BOOKING_TIME_INVALID with details
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "BOOKING_TIME_INVALID",
+              message: "Rentang waktu booking tidak valid.",
+              details: [
+                {
+                  field: "estimated_return_at",
+                  reason: "Estimasi kembali harus setelah waktu mulai.",
+                },
+              ],
+            },
+            meta: { request_id: "req_invalid_time" },
+          }),
+          { status: 422, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.createBooking(
+          {
+            projector_id: "prj_001",
+            booking_date: "2026-11-27",
+            start_time: "14:00:00",
+            estimated_return_at: "2026-11-27T02:00:00Z",
+          },
+          "key_3"
+        );
+        expect.unreachable("Should have failed with 422 BOOKING_TIME_INVALID");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(422);
+        expect(apiErr.code).toBe("BOOKING_TIME_INVALID");
+        expect(apiErr.getFieldErrors()).toEqual({
+          estimated_return_at: "Estimasi kembali harus setelah waktu mulai.",
+        });
+      }
+    });
+
+    it("lists komting bookings with status filter and pagination query", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "bkg_001",
+                booking_code: "BKG-20261127-001",
+                komting_id: "user_1",
+                projector_id: "prj_001",
+                booking_date: "2026-11-27",
+                start_time: "09:00:00",
+                estimated_return_at: "2026-11-27T04:00:00Z",
+                status: "CONFIRMED",
+                pickup_window: {
+                  opens_at: "2026-11-27T01:30:00Z",
+                  closes_at: "2026-11-27T02:15:00Z",
+                },
+                created_at: "2026-11-26T10:00:00Z",
+              },
+            ],
+            meta: {
+              request_id: "req_list_bkg",
+              pagination: {
+                page: 1,
+                page_size: 20,
+                total_items: 1,
+                total_pages: 1,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const listResult = await apiServices.booking.listKomtingBookings({
+        status: "CONFIRMED",
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/komting/bookings");
+      expect(url).toContain("status=CONFIRMED");
+      expect(url).toContain("page=1");
+      expect(url).toContain("page_size=20");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(listResult.data).toHaveLength(1);
+      expect(listResult.data[0]?.booking_code).toBe("BKG-20261127-001");
+      expect(listResult.meta.pagination.total_items).toBe(1);
+    });
+
+    it("gets komting booking detail by ID and handles 404 & 403 errors", async () => {
+      // 1. Success case
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "bkg_target_123",
+              booking_code: "BKG-20261127-123",
+              komting_id: "user_1",
+              projector_id: "prj_001",
+              booking_date: "2026-11-27",
+              start_time: "09:00:00",
+              estimated_return_at: "2026-11-27T04:00:00Z",
+              status: "CONFIRMED",
+              pickup_window: {
+                opens_at: "2026-11-27T01:30:00Z",
+                closes_at: "2026-11-27T02:15:00Z",
+              },
+              created_at: "2026-11-26T10:00:00Z",
+            },
+            meta: { request_id: "req_detail_bkg" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const detail = await apiServices.booking.getKomtingBooking("bkg_target_123");
+      expect(detail.data.booking_code).toBe("BKG-20261127-123");
+
+      const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/komting/bookings/bkg_target_123");
+
+      // 2. 404 Error
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PROJECTOR_NOT_FOUND",
+              message: "Data booking tidak ditemukan.",
+            },
+            meta: { request_id: "req_bkg_404" },
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.getKomtingBooking("bkg_not_exist");
+        expect.unreachable("Should have failed with 404");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(404);
+      }
+
+      // 3. 403 Forbidden
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "FORBIDDEN",
+              message: "Anda tidak memiliki izin untuk mengakses booking ini.",
+            },
+            meta: { request_id: "req_bkg_403" },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.getKomtingBooking("bkg_other_user");
+        expect.unreachable("Should have failed with 403");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.code).toBe("FORBIDDEN");
+      }
+    });
+
+    it("fetches booking QR code payload from /komting/bookings/{id}/qr", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              qr_payload: "opaque_qr_token_server_generated_999",
+              expires_at: "2026-11-27T02:15:00Z",
+            },
+            meta: { request_id: "req_qr_fetch" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const qrResult = await apiServices.qr.getBookingQr("bkg_target_123");
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/komting/bookings/bkg_target_123/qr");
+      expect(new Headers(options.headers).get("Authorization")).toBe(
+        "Bearer test_bearer_token_xyz"
+      );
+
+      expect(qrResult.data.qr_payload).toBe("opaque_qr_token_server_generated_999");
+      expect(qrResult.data.expires_at).toBe("2026-11-27T02:15:00Z");
+    });
+
+    it("cancels booking with reason, Idempotency-Key, and handles 409 conflict when not cancellable", async () => {
+      // 1. Success cancellation
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "bkg_to_cancel",
+              booking_code: "BKG-20261127-001",
+              status: "CANCELLED",
+            },
+            meta: { request_id: "req_cancel_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const cancelled = await apiServices.booking.cancelKomtingBooking(
+        "bkg_to_cancel",
+        { reason: "Jadwal kuliah dibatalkan oleh dosen." },
+        "idemp_cancel_key_1"
+      );
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/komting/bookings/bkg_to_cancel/cancel");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Idempotency-Key")).toBe("idemp_cancel_key_1");
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(JSON.parse(options.body as string)).toEqual({
+        reason: "Jadwal kuliah dibatalkan oleh dosen.",
+      });
+
+      expect(cancelled.data.status).toBe("CANCELLED");
+
+      // 2. 409 Conflict when booking is already FULFILLED or EXPIRED
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "BOOKING_CONFLICT",
+              message: "Hanya booking berstatus CONFIRMED yang dapat dibatalkan.",
+            },
+            meta: { request_id: "req_cancel_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.booking.cancelKomtingBooking(
+          "bkg_fulfilled",
+          { reason: "Ingin membatalkan tapi sudah diambil." },
+          "idemp_cancel_key_2"
+        );
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("BOOKING_CONFLICT");
+      }
     });
   });
 

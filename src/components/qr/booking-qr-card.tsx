@@ -120,6 +120,12 @@ export function BookingQrCard({
           </Alert>
         )}
 
+        {qrEligible && !loading && !errorMessage && !renderError && !qrPayload && (
+          <Alert tone="warning" title="QR Belum Tersedia">
+            Token QR belum diterbitkan oleh server. Silakan muat ulang beberapa saat lagi.
+          </Alert>
+        )}
+
         {qrEligible && !loading && !errorMessage && qrPayload && (
           <div className="flex flex-col items-center gap-3">
             {svgMarkup && (

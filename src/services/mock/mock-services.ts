@@ -936,8 +936,17 @@ export const mockServices: ServiceRegistry = {
       return wrapMockSingle(found);
     },
 
-    async cancelKomtingBooking(bookingId) {
+    async cancelKomtingBooking(bookingId, payload, _idempotencyKey) {
+      void _idempotencyKey;
       await simulateMockRequest();
+      if (!payload?.reason?.trim()) {
+        throw new ApiClientError({
+          status: 422,
+          code: "UNKNOWN_ERROR",
+          message: "Alasan pembatalan wajib diisi.",
+          requestId: createMockRequestId(),
+        });
+      }
       const index = mockBookingsStore.findIndex((b) => b.id === bookingId);
       if (index === -1) {
         throw new ApiClientError({

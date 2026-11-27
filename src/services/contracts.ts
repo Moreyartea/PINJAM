@@ -151,7 +151,8 @@ export interface BookingService {
   getKomtingBooking(bookingId: string): Promise<ApiSingleResponse<Booking>>;
   cancelKomtingBooking(
     bookingId: string,
-    payload: { reason: string }
+    payload: { reason: string },
+    idempotencyKey?: string
   ): Promise<ApiSingleResponse<Booking>>;
   listStaffBookings(
     params?: ListQueryParams & { date?: string; status?: BookingStatus }
