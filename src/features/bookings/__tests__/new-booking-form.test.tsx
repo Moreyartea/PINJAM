@@ -131,10 +131,12 @@ describe("NewBookingForm", () => {
 
     expect(await screen.findByText("Formulir Booking")).toBeInTheDocument();
     await waitFor(() => {
-      expect(checkAvailabilityMock).toHaveBeenCalledWith({
-        projector_id: "prj_1",
-        date: expect.any(String),
-      });
+      expect(checkAvailabilityMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projector_id: "prj_1",
+          date: expect.any(String),
+        })
+      );
     });
 
     await user.selectOptions(screen.getByLabelText(/Unit Proyektor/i), "prj_2");

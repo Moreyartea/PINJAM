@@ -85,13 +85,25 @@ export function NewBookingForm() {
     reload: reloadAvailability,
   } = useAsyncQuery<AvailabilityResult>(
     async () => {
-      const response = await services.availability.checkAvailability({
+      const params: {
+        projector_id: string;
+        date: string;
+        start_time?: string;
+        estimated_return_at?: string;
+      } = {
         projector_id: activeProjectorId,
         date: bookingDate,
-      });
+      };
+      if (startTime) {
+        params.start_time = `${startTime}:00`;
+      }
+      if (startTime && estimatedReturnTime) {
+        params.estimated_return_at = jakartaDateTimeToUtcIso(bookingDate, estimatedReturnTime);
+      }
+      const response = await services.availability.checkAvailability(params);
       return response.data;
     },
-    [activeProjectorId, bookingDate],
+    [activeProjectorId, bookingDate, startTime, estimatedReturnTime],
     { enabled: Boolean(activeProjectorId && bookingDate) }
   );
 
@@ -327,7 +339,15 @@ export function NewBookingForm() {
                 variant="primary"
                 isLoading={isSubmitting}
                 loadingText="Mengirim Booking..."
-                disabled={!isKomtingEligible || hoursLoading || !effectiveOperatingHours}
+                disabled={
+                  !isKomtingEligible ||
+                  hoursLoading ||
+                  availabilityLoading ||
+                  Boolean(hoursError) ||
+                  Boolean(availabilityError) ||
+                  !effectiveOperatingHours ||
+                  availability?.is_bookable === false
+                }
               >
                 Kirim Booking
               </Button>
@@ -389,29 +409,33 @@ export function NewBookingForm() {
                 </div>
               )}
 
-              {availability && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-[var(--color-muted)]">
-                      Status Fisik Unit
-                    </span>
-                    <StatusBadge status={availability.physical_status} />
+              {!hoursLoading &&
+                !availabilityLoading &&
+                !hoursError &&
+                !availabilityError &&
+                availability && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[var(--color-muted)]">
+                        Status Fisik Unit
+                      </span>
+                      <StatusBadge status={availability.physical_status} />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[var(--color-muted)]">
+                        Dapat Dibooking ({formatCalendarDate(availability.date)})
+                      </span>
+                      <Badge tone={availability.is_bookable ? "success" : "danger"}>
+                        {availability.is_bookable ? "Ya (Tentatif)" : "Tidak"}
+                      </Badge>
+                    </div>
+                    {availability.message && (
+                      <Alert tone={availability.is_bookable ? "info" : "warning"}>
+                        {availability.message}
+                      </Alert>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-[var(--color-muted)]">
-                      Dapat Dibooking ({formatCalendarDate(availability.date)})
-                    </span>
-                    <Badge tone={availability.is_bookable ? "success" : "danger"}>
-                      {availability.is_bookable ? "Ya (Tentatif)" : "Tidak"}
-                    </Badge>
-                  </div>
-                  {availability.message && (
-                    <Alert tone={availability.is_bookable ? "info" : "warning"}>
-                      {availability.message}
-                    </Alert>
-                  )}
-                </div>
-              )}
+                )}
             </CardContent>
           </Card>
 

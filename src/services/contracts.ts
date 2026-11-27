@@ -120,11 +120,17 @@ export interface ProjectorService {
   deactivateProjector(projectorId: string): Promise<ApiSingleResponse<Projector>>;
 }
 
+export interface AvailabilityCheckParams {
+  projector_id: string;
+  date: string;
+  start_time?: string;
+  estimated_return_at?: string;
+}
+
 export interface AvailabilityService {
-  checkAvailability(params: {
-    projector_id: string;
-    date: string;
-  }): Promise<ApiSingleResponse<AvailabilityResult>>;
+  checkAvailability(
+    params: AvailabilityCheckParams
+  ): Promise<ApiSingleResponse<AvailabilityResult>>;
 }
 
 export interface CreateBookingPayload {

@@ -88,7 +88,7 @@ export function ProjectorListView() {
   const handleCheckAvailability = async (projectorId: string) => {
     setAvailabilityByProjector((prev) => ({
       ...prev,
-      [projectorId]: { loading: true },
+      [projectorId]: { loading: true, result: undefined, error: undefined },
     }));
 
     try {
