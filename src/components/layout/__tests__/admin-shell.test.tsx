@@ -1,0 +1,120 @@
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminShell } from "@/components/layout/admin-shell";
+import { StaffShell } from "@/components/layout/staff-shell";
+import type { UserProfile } from "@/types/domain";
+
+const replaceMock = vi.fn();
+let currentUser: UserProfile = {
+  id: "admin_1",
+  email: "admin@kampus.ac.id",
+  full_name: "Administrator Sistem",
+  role: "ADMIN",
+  account_status: "ACTIVE",
+};
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: replaceMock }),
+  usePathname: () => "/admin",
+}));
+
+vi.mock("@/lib/auth/auth-context", () => ({
+  useAuth: () => ({
+    status: "authenticated",
+    user: currentUser,
+    error: null,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    refreshMe: vi.fn(),
+    clearError: vi.fn(),
+  }),
+}));
+
+describe("AdminShell & Role Navigation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentUser = {
+      id: "admin_1",
+      email: "admin@kampus.ac.id",
+      full_name: "Administrator Sistem",
+      role: "ADMIN",
+      account_status: "ACTIVE",
+    };
+  });
+
+  it("renders all required ADMIN navigation links including STAFF operations", () => {
+    render(
+      <AdminShell>
+        <div>Konten Dashboard Admin</div>
+      </AdminShell>
+    );
+
+    const expectedRoutes = [
+      "/admin",
+      "/admin/applications",
+      "/admin/assignments",
+      "/admin/staff",
+      "/admin/projectors",
+      "/admin/maintenance",
+      "/admin/operating-hours",
+      "/admin/audit-logs",
+      "/admin/corrections",
+      "/staff",
+    ];
+
+    const links = screen.getAllByRole("link");
+    const hrefs = links.map((link) => link.getAttribute("href"));
+    for (const route of expectedRoutes) {
+      expect(hrefs).toContain(route);
+    }
+
+    expect(screen.getByText("Operasional STAFF")).toBeInTheDocument();
+    expect(screen.getByText("ADMIN")).toBeInTheDocument();
+    expect(screen.getAllByText("Parsial")).toHaveLength(2);
+    expect(screen.getAllByText("Segera")).toHaveLength(1);
+  });
+
+  it("keeps StaffShell isolated without ADMIN routes", () => {
+    currentUser = {
+      id: "staff_1",
+      email: "staff@kampus.ac.id",
+      full_name: "Petugas Operasional",
+      role: "STAFF",
+      account_status: "ACTIVE",
+    };
+
+    render(
+      <StaffShell>
+        <div>Konten Staff</div>
+      </StaffShell>
+    );
+
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href") ?? "");
+
+    expect(hrefs).toContain("/staff");
+    expect(hrefs.some((href) => href.startsWith("/admin"))).toBe(false);
+  });
+
+  it("adds Dashboard ADMIN link in StaffShell when current user has role ADMIN", () => {
+    currentUser = {
+      id: "admin_1",
+      email: "admin@kampus.ac.id",
+      full_name: "Administrator Sistem",
+      role: "ADMIN",
+      account_status: "ACTIVE",
+    };
+
+    render(
+      <StaffShell>
+        <div>Konten Staff Operasional</div>
+      </StaffShell>
+    );
+
+    const links = screen.getAllByRole("link");
+    const hrefs = links.map((link) => link.getAttribute("href") ?? "");
+
+    expect(hrefs).toContain("/admin");
+    expect(hrefs).toContain("/staff");
+    expect(screen.getByText("Dashboard ADMIN")).toBeInTheDocument();
+  });
+});

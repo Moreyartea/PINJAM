@@ -1,5 +1,20 @@
 import { apiRequest } from "@/lib/api/client";
+import { ApiClientError } from "@/lib/api/errors";
+import { getAuthProviderAdapter } from "@/lib/auth/provider-adapter";
 import type { ServiceRegistry } from "@/services/contracts";
+
+function requireAuthAdapter() {
+  const adapter = getAuthProviderAdapter();
+  if (!adapter) {
+    throw new ApiClientError({
+      status: 500,
+      code: "AUTH_PROVIDER_NOT_CONFIGURED",
+      message:
+        "Provider autentikasi belum dikonfigurasi (Open Decision). Aktifkan mode mock untuk pengembangan lokal.",
+    });
+  }
+  return adapter;
+}
 
 /**
  * Real HTTP API service implementations strictly following API_CONTRACT_PINJAM.md.
@@ -7,11 +22,20 @@ import type { ServiceRegistry } from "@/services/contracts";
 export const apiServices: ServiceRegistry = {
   auth: {
     async getSession() {
-      // OPEN DECISION: Auth provider (e.g. Supabase Auth) will be wired in Sprint FE-1.
-      return null;
+      const adapter = getAuthProviderAdapter();
+      return adapter ? adapter.getSession() : null;
+    },
+    async signInWithPassword(credentials) {
+      return requireAuthAdapter().signInWithPassword(credentials);
+    },
+    async verifyEmail(params) {
+      return requireAuthAdapter().verifyEmail(params);
     },
     async signOut() {
-      // OPEN DECISION: Auth provider sign-out will be wired in Sprint FE-1.
+      const adapter = getAuthProviderAdapter();
+      if (adapter) {
+        await adapter.signOut();
+      }
     },
   },
 
@@ -47,12 +71,13 @@ export const apiServices: ServiceRegistry = {
         method: "POST",
         body: payload,
       }),
-    approveReplacement: (applicationId, payload) =>
+    approveReplacement: (applicationId, payload, idempotencyKey) =>
       apiRequest(
         `/admin/komting/applications/${encodeURIComponent(applicationId)}/approve-replacement`,
         {
           method: "POST",
           body: payload,
+          idempotencyKey,
         }
       ),
     deactivateAssignment: (assignmentId, payload) =>
@@ -104,10 +129,11 @@ export const apiServices: ServiceRegistry = {
       }),
     getKomtingBooking: (bookingId) =>
       apiRequest(`/komting/bookings/${encodeURIComponent(bookingId)}`),
-    cancelKomtingBooking: (bookingId, payload) =>
+    cancelKomtingBooking: (bookingId, payload, idempotencyKey) =>
       apiRequest(`/komting/bookings/${encodeURIComponent(bookingId)}/cancel`, {
         method: "POST",
         body: payload,
+        idempotencyKey,
       }),
     listStaffBookings: (params) =>
       apiRequest("/staff/bookings", {
@@ -131,6 +157,10 @@ export const apiServices: ServiceRegistry = {
     listKomtingLoans: (params) =>
       apiRequest("/komting/loans", {
         query: params,
+      }),
+    initiateReturn: (loanId) =>
+      apiRequest(`/komting/loans/${encodeURIComponent(loanId)}/return`, {
+        method: "POST",
       }),
   },
 

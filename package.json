@@ -9,22 +9,50 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "npm run test:unit:be && npm run test:unit:fe",
+    "test:unit:be": "npm run test:auth && npm run test:be2 && npm run test:be3 && npm run test:be4 && npm run test:be5 && npm run test:be6",
+    "test:unit:fe": "vitest run",
+    "test:watch": "vitest",
+    "test:auth": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/auth/env-and-clients.test.ts tests/auth/session-sync-and-guards.test.ts",
+    "test:be2": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/be2/profile-and-komting.test.ts",
+    "test:be3": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/be3/inventory-hours-availability.test.ts tests/be3/audit-logs.test.ts",
+    "test:be4": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/be4/booking-and-loan.test.ts tests/be4/komting-dashboard.test.ts tests/be4/qr-token-read-only.test.ts tests/be4/staff-dashboard.test.ts",
+    "test:be5": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/be5/return-and-inspection.test.ts tests/be5/maintenance.test.ts",
+    "test:be6": "node --conditions=react-server --import ./tests/register-paths.mjs --test tests/be6/email-and-outbox.test.ts",
+    "test:auth:live": "node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/auth/live-supabase.test.ts",
+    "test:be2:live": "PINJAM_RUN_LIVE_BE2_TESTS=true node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/be2/live-supabase.test.ts",
+    "test:be3:live": "PINJAM_RUN_LIVE_BE3_TESTS=true node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/be3/live-supabase.test.ts",
+    "test:be4:live": "PINJAM_RUN_LIVE_BE4_TESTS=true node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/be4/live-supabase.test.ts",
+    "test:be5:live": "PINJAM_RUN_LIVE_BE5_TESTS=true node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/be5/live-supabase.test.ts",
+    "test:be6:live": "PINJAM_RUN_LIVE_BE6_TESTS=true node --conditions=react-server --env-file-if-exists=.env.local --import ./tests/register-live-env.mjs --import ./tests/register-paths.mjs --test tests/be6/live-supabase.test.ts",
+    "provision:test-accounts": "node --env-file-if-exists=.env.local scripts/provision-test-accounts.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.2",
     "next": "^16.4.6",
+    "qrcode": "^1.5.4",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.13",
     "@types/node": "^22.15.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "eslint": "^9.25.0",
     "eslint-config-next": "^16.4.6",
+    "jsdom": "^29.1.1",
     "prettier": "^3.5.3",
     "tailwindcss": "^4.3.5",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.1.2"
   }
 }

@@ -36,6 +36,23 @@ export type HandoverActorType = "KOMTING" | "REPRESENTATIVE";
 
 export type QRActionType = "PICKUP" | "RETURN";
 
+export type FineType = "LATE_RETURN" | "DAMAGE" | "LOSS" | "NONE";
+
+export type FineStatus = "PENDING" | "WAIVED" | "PAID" | "EXEMPT";
+
+export interface LoanFine {
+  id: string;
+  loan_id: string;
+  fine_type: FineType;
+  amount: number;
+  overdue_minutes: number;
+  status: FineStatus;
+  calculation_details?: Record<string, unknown>;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface KomtingAssignmentSummary {
   id: string;
   user_id?: string;
@@ -109,6 +126,8 @@ export interface OperatingHoursSnapshot {
   closes_at: string;
   configured_open_at?: string;
   early_pickup_allowed_at: string;
+  admin_early_open_at?: string | null;
+  note?: string | null;
 }
 
 export interface AvailabilityResult {
@@ -131,7 +150,12 @@ export interface KomtingApplication {
   submitted_at: string;
   admin_note?: string | null;
   rejection_reason?: string | null;
+  has_identity_photo?: boolean;
+  identity_photo_url?: string | null;
+  identity_photo_signed_url?: string | null;
 }
+
+export type { KomtingReturnInitiationResult } from "@/services/contracts";
 
 export interface MaintenanceRecord {
   id: string;
@@ -156,4 +180,44 @@ export interface AuditLogEntry {
   reason: string | null;
   request_id: string;
   created_at: string;
+}
+
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+}
+
+export interface DashboardReminder {
+  id?: string;
+  message: string;
+  level?: "info" | "warning";
+}
+
+export interface KomtingDashboardSummary {
+  active_assignment: KomtingAssignmentSummary | null;
+  active_booking: Booking | null;
+  active_loan: Loan | null;
+  recent_bookings?: Booking[];
+  relevant_projectors?: Projector[];
+  reminders?: DashboardReminder[];
+}
+
+export interface StaffActivityItem {
+  id?: string;
+  message: string;
+  timestamp?: string;
+}
+
+export interface StaffDashboardSummary {
+  bookings_today_count?: number;
+  pending_pickup_count?: number;
+  active_loans_count?: number;
+  overdue_loans_count?: number;
+  maintenance_units_count?: number;
+  pending_pickups?: Booking[];
+  active_loans?: Loan[];
+  maintenance_units?: Projector[];
+  recent_activities?: StaffActivityItem[];
 }

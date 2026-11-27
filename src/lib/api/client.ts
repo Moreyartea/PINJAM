@@ -27,9 +27,17 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-function buildUrl(path: string, query?: object): string {
+export function buildUrl(
+  path: string,
+  query?: object,
+  baseUrl: string = env.apiBaseUrl
+): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const base = `${env.apiBaseUrl}${API_VERSION_PREFIX}${normalizedPath}`;
+  const apiPath = normalizedPath.startsWith(API_VERSION_PREFIX)
+    ? normalizedPath
+    : `${API_VERSION_PREFIX}${normalizedPath}`;
+  const cleanBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+  const base = cleanBaseUrl ? `${cleanBaseUrl}${apiPath}` : apiPath;
 
   if (!query) return base;
 

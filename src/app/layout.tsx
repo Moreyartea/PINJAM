@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
+import { AppProviders } from "@/components/providers/app-providers";
 import { env } from "@/lib/config/env";
 import "./globals.css";
 
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           Lewati ke konten utama
         </a>
-        {children}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

@@ -11,6 +11,7 @@ import type {
   BookingStatus,
   HandoverActorType,
   KomtingApplication,
+  KomtingDashboardSummary,
   Loan,
   LoanStatus,
   MaintenanceRecord,
@@ -20,6 +21,7 @@ import type {
   ProjectorPhysicalStatus,
   QRActionType,
   ReturnInspection,
+  StaffDashboardSummary,
   UserProfile,
 } from "@/types/domain";
 
@@ -28,8 +30,26 @@ export interface AuthSession {
   expires_at?: string;
 }
 
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export interface EmailVerificationParams {
+  token?: string;
+  token_hash?: string;
+  type?: string;
+}
+
+export interface EmailVerificationResult {
+  verified: boolean;
+  message: string;
+}
+
 export interface AuthService {
   getSession(): Promise<AuthSession | null>;
+  signInWithPassword(credentials: AuthCredentials): Promise<AuthSession>;
+  verifyEmail(params: EmailVerificationParams): Promise<EmailVerificationResult>;
   signOut(): Promise<void>;
 }
 
@@ -67,7 +87,8 @@ export interface ApplicationService {
   ): Promise<ApiSingleResponse<KomtingApplication>>;
   approveReplacement(
     applicationId: string,
-    payload: { admin_note?: string | null }
+    payload: { admin_note?: string | null },
+    idempotencyKey: string
   ): Promise<
     ApiSingleResponse<{
       application_id: string;
@@ -99,11 +120,17 @@ export interface ProjectorService {
   deactivateProjector(projectorId: string): Promise<ApiSingleResponse<Projector>>;
 }
 
+export interface AvailabilityCheckParams {
+  projector_id: string;
+  date: string;
+  start_time?: string;
+  estimated_return_at?: string;
+}
+
 export interface AvailabilityService {
-  checkAvailability(params: {
-    projector_id: string;
-    date: string;
-  }): Promise<ApiSingleResponse<AvailabilityResult>>;
+  checkAvailability(
+    params: AvailabilityCheckParams
+  ): Promise<ApiSingleResponse<AvailabilityResult>>;
 }
 
 export interface CreateBookingPayload {
@@ -124,12 +151,24 @@ export interface BookingService {
   getKomtingBooking(bookingId: string): Promise<ApiSingleResponse<Booking>>;
   cancelKomtingBooking(
     bookingId: string,
-    payload: { reason: string }
+    payload: { reason: string },
+    idempotencyKey?: string
   ): Promise<ApiSingleResponse<Booking>>;
   listStaffBookings(
     params?: ListQueryParams & { date?: string; status?: BookingStatus }
   ): Promise<ApiListResponse<Booking>>;
   getStaffBooking(bookingId: string): Promise<ApiSingleResponse<Booking>>;
+}
+
+export interface KomtingReturnInitiationResult {
+  loan_id: string;
+  booking_id: string;
+  booking_code: string;
+  projector_name: string;
+  qr_payload: string;
+  qr_token_hash: string;
+  expires_at: string;
+  instructions: string;
 }
 
 export interface LoanService {
@@ -154,6 +193,9 @@ export interface LoanService {
   listKomtingLoans(
     params?: ListQueryParams & { status?: LoanStatus }
   ): Promise<ApiListResponse<Loan>>;
+  initiateReturn(
+    loanId: string
+  ): Promise<ApiSingleResponse<KomtingReturnInitiationResult>>;
 }
 
 export interface QrValidationResponse {
@@ -230,8 +272,8 @@ export interface OperatingHoursService {
 }
 
 export interface AdminService {
-  getKomtingDashboard(): Promise<ApiSingleResponse<Record<string, unknown>>>;
-  getStaffDashboard(): Promise<ApiSingleResponse<Record<string, unknown>>>;
+  getKomtingDashboard(): Promise<ApiSingleResponse<KomtingDashboardSummary>>;
+  getStaffDashboard(): Promise<ApiSingleResponse<StaffDashboardSummary>>;
   correctTransaction(
     transactionId: string,
     payload: {
