@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -36,6 +36,7 @@ type MaintenanceStatusFilter = "ALL" | MaintenanceStatus;
 
 export function StaffMaintenanceView() {
   const [statusFilter, setStatusFilter] = useState<MaintenanceStatusFilter>("IN_PROGRESS");
+  const [page, setPage] = useState(1);
 
   // Start maintenance modal state
   const [startTarget, setStartTarget] = useState<Projector | null>(null);
@@ -55,6 +56,9 @@ export function StaffMaintenanceView() {
 
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
+  const startSubmittingRef = useRef(false);
+  const completeSubmittingRef = useRef(false);
+
   const {
     data: maintenanceRes,
     loading: maintLoading,
@@ -63,11 +67,11 @@ export function StaffMaintenanceView() {
   } = useAsyncQuery<ApiListResponse<MaintenanceRecord>>(
     () =>
       services.maintenance.listMaintenance({
-        page: 1,
+        page,
         page_size: 20,
         status: statusFilter === "ALL" ? undefined : statusFilter,
       }),
-    [statusFilter]
+    [page, statusFilter]
   );
 
   const {
@@ -90,15 +94,17 @@ export function StaffMaintenanceView() {
   }, [projectors]);
 
   const records = maintenanceRes?.data ?? [];
+  const pagination = maintenanceRes?.meta.pagination ?? null;
 
   const handleStartMaintenance = async () => {
-    if (!startTarget) return;
+    if (!startTarget || startSubmittingRef.current) return;
     setStartError(null);
 
     const validation = validateStartMaintenanceForm({ reason: startReason });
     setStartReasonError(validation.reason);
     if (validation.reason) return;
 
+    startSubmittingRef.current = true;
     setStarting(true);
     try {
       await services.maintenance.createMaintenance(startTarget.id, {
@@ -115,17 +121,19 @@ export function StaffMaintenanceView() {
       setStartError(normalizeUnknownError(err).message);
     } finally {
       setStarting(false);
+      startSubmittingRef.current = false;
     }
   };
 
   const handleCompleteMaintenance = async () => {
-    if (!completeTarget) return;
+    if (!completeTarget || completeSubmittingRef.current) return;
     setCompleteError(null);
 
     const validation = validateCompleteMaintenanceForm({ resolutionNote });
     setResolutionError(validation.resolutionNote);
     if (validation.resolutionNote) return;
 
+    completeSubmittingRef.current = true;
     setCompleting(true);
     try {
       await services.maintenance.completeMaintenance(completeTarget.id, {
@@ -145,6 +153,7 @@ export function StaffMaintenanceView() {
       setCompleteError(normalizeUnknownError(err).message);
     } finally {
       setCompleting(false);
+      completeSubmittingRef.current = false;
     }
   };
 
@@ -180,7 +189,10 @@ export function StaffMaintenanceView() {
                 { value: "COMPLETED", label: "COMPLETED — Selesai" },
                 { value: "ALL", label: "Semua Catatan" },
               ]}
-              onChange={(e) => setStatusFilter(e.target.value as MaintenanceStatusFilter)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as MaintenanceStatusFilter);
+                setPage(1);
+              }}
             />
           </div>
           <Button
@@ -220,64 +232,93 @@ export function StaffMaintenanceView() {
         )}
 
         {!maintLoading && !maintError && records.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {records.map((rec) => {
-              const unit = projectorMap.get(rec.projector_id);
-              return (
-                <Card key={rec.id}>
-                  <CardHeader>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Badge tone="neutral" className="font-mono">
-                        {unit?.asset_code ?? rec.projector_id}
-                      </Badge>
-                      <StatusBadge status={rec.status} />
-                    </div>
-                    <CardTitle className="mt-3">{unit?.name ?? rec.projector_id}</CardTitle>
-                    <CardDescription>
-                      Mulai: {formatJakartaDateTime(rec.started_at)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
-                    <p>
-                      <strong>Alasan:</strong> {rec.reason}
-                    </p>
-                    {rec.note && (
-                      <p className="text-[var(--color-muted)]">
-                        <strong>Catatan:</strong> {rec.note}
+          <>
+            <div className="grid gap-4 md:grid-cols-2">
+              {records.map((rec) => {
+                const unit = projectorMap.get(rec.projector_id);
+                return (
+                  <Card key={rec.id}>
+                    <CardHeader>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Badge tone="neutral" className="font-mono">
+                          {unit?.asset_code ?? rec.projector_id}
+                        </Badge>
+                        <StatusBadge status={rec.status} />
+                      </div>
+                      <CardTitle className="mt-3">{unit?.name ?? rec.projector_id}</CardTitle>
+                      <CardDescription>
+                        Mulai: {formatJakartaDateTime(rec.started_at)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p>
+                        <strong>Alasan:</strong> {rec.reason}
                       </p>
-                    )}
-                    {rec.resolution_note && (
-                      <Alert tone="success" title="Resolusi">
-                        {rec.resolution_note}
-                      </Alert>
-                    )}
-                  </CardContent>
-                  <CardFooter className="justify-between">
-                    <Link href={`/staff/maintenance/${encodeURIComponent(rec.id)}`}>
-                      <Button variant="outline" size="sm">
-                        Detail
-                      </Button>
-                    </Link>
-                    {rec.status === "IN_PROGRESS" && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          setCompleteError(null);
-                          setResolutionError(undefined);
-                          setResolutionNote("");
-                          setSetAvailable(true);
-                          setCompleteTarget(rec);
-                        }}
-                      >
-                        Selesaikan Maintenance
-                      </Button>
-                    )}
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
+                      {rec.note && (
+                        <p className="text-[var(--color-muted)]">
+                          <strong>Catatan:</strong> {rec.note}
+                        </p>
+                      )}
+                      {rec.resolution_note && (
+                        <Alert tone="success" title="Resolusi">
+                          {rec.resolution_note}
+                        </Alert>
+                      )}
+                    </CardContent>
+                    <CardFooter className="justify-between">
+                      <Link href={`/staff/maintenance/${encodeURIComponent(rec.id)}`}>
+                        <Button variant="outline" size="sm">
+                          Detail
+                        </Button>
+                      </Link>
+                      {rec.status === "IN_PROGRESS" && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setCompleteError(null);
+                            setResolutionError(undefined);
+                            setResolutionNote("");
+                            setSetAvailable(true);
+                            setCompleteTarget(rec);
+                          }}
+                        >
+                          Selesaikan Maintenance
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {pagination && pagination.total_pages > 1 && (
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <p className="text-sm text-[var(--color-muted)]">
+                  Halaman <strong>{pagination.page}</strong> dari{" "}
+                  <strong>{pagination.total_pages}</strong> ({pagination.total_items} catatan)
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= pagination.total_pages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Berikutnya
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
 

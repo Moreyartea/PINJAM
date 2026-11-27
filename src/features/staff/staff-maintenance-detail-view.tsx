@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -52,6 +52,7 @@ export function StaffMaintenanceDetailView({ maintenanceId }: { maintenanceId: s
   const [resolutionError, setResolutionError] = useState<string | undefined>(undefined);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const {
     data: record,
@@ -78,11 +79,13 @@ export function StaffMaintenanceDetailView({ maintenanceId }: { maintenanceId: s
   );
 
   const handleComplete = async () => {
+    if (submittingRef.current) return;
     setSubmitError(null);
     const validation = validateCompleteMaintenanceForm({ resolutionNote });
     setResolutionError(validation.resolutionNote);
     if (validation.resolutionNote) return;
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await services.maintenance.completeMaintenance(maintenanceId, {
@@ -95,6 +98,7 @@ export function StaffMaintenanceDetailView({ maintenanceId }: { maintenanceId: s
       setSubmitError(normalizeUnknownError(err).message);
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

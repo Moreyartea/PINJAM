@@ -1480,6 +1480,296 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
     });
   });
 
+  describe("STAFF & ADMIN Projector Maintenance Management (GET /staff/maintenance, POST /staff/projectors/{id}/maintenance, POST /staff/maintenance/{id}/complete)", () => {
+    it("lists maintenance records with pagination and status filters", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "maint_001",
+                projector_id: "prj_001",
+                reason: "Lampu redup dan berkedip",
+                note: "Perlu penggantian bohlam",
+                status: "IN_PROGRESS",
+                started_at: "2026-11-26T08:00:00Z",
+                resolution_note: null,
+                completed_at: null,
+              },
+            ],
+            meta: {
+              request_id: "req_maint_list",
+              pagination: {
+                page: 1,
+                page_size: 20,
+                total_items: 1,
+                total_pages: 1,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.maintenance.listMaintenance({
+        status: "IN_PROGRESS",
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/maintenance");
+      expect(url).toContain("status=IN_PROGRESS");
+      expect(url).toContain("page=1");
+      expect(url).toContain("page_size=20");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.id).toBe("maint_001");
+      expect(result.data[0]?.status).toBe("IN_PROGRESS");
+      expect(result.meta.pagination?.total_items).toBe(1);
+    });
+
+    it("creates a new maintenance record and transitions unit to MAINTENANCE", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "maint_002",
+              projector_id: "prj_001",
+              reason: "Port HDMI longgar",
+              note: "Kabel tidak terdeteksi konsisten",
+              status: "IN_PROGRESS",
+              started_at: "2026-11-27T09:00:00Z",
+              resolution_note: null,
+              completed_at: null,
+            },
+            meta: { request_id: "req_maint_create" },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.maintenance.createMaintenance("prj_001", {
+        reason: "Port HDMI longgar",
+        note: "Kabel tidak terdeteksi konsisten",
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/projectors/prj_001/maintenance");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(JSON.parse(options.body as string)).toEqual({
+        reason: "Port HDMI longgar",
+        note: "Kabel tidak terdeteksi konsisten",
+      });
+
+      expect(result.data.id).toBe("maint_002");
+      expect(result.data.status).toBe("IN_PROGRESS");
+    });
+
+    it("handles 409 conflict when projector has active loan during createMaintenance", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PROJECTOR_HAS_ACTIVE_LOAN",
+              message: "Proyektor sedang dalam masa peminjaman aktif.",
+            },
+            meta: { request_id: "req_maint_loan_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.maintenance.createMaintenance("prj_borrowed", {
+          reason: "Kipas bising",
+        });
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("PROJECTOR_HAS_ACTIVE_LOAN");
+        expect(apiErr.message).toContain("dipinjam");
+      }
+    });
+
+    it("completes maintenance with set_projector_available: true", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "maint_001",
+              projector_id: "prj_001",
+              reason: "Lampu redup dan berkedip",
+              note: "Perlu penggantian bohlam",
+              status: "COMPLETED",
+              started_at: "2026-11-26T08:00:00Z",
+              resolution_note: "Bohlam baru terpasang dan lolos uji fungsi 30 menit",
+              completed_at: "2026-11-27T10:00:00Z",
+            },
+            meta: { request_id: "req_maint_complete_avail" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.maintenance.completeMaintenance("maint_001", {
+        resolution_note: "Bohlam baru terpasang dan lolos uji fungsi 30 menit",
+        set_projector_available: true,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/maintenance/maint_001/complete");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(JSON.parse(options.body as string)).toEqual({
+        resolution_note: "Bohlam baru terpasang dan lolos uji fungsi 30 menit",
+        set_projector_available: true,
+      });
+
+      expect(result.data.status).toBe("COMPLETED");
+      expect(result.data.resolution_note).toBe(
+        "Bohlam baru terpasang dan lolos uji fungsi 30 menit"
+      );
+    });
+
+    it("completes maintenance with set_projector_available: false (unit stays in MAINTENANCE)", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "maint_001",
+              projector_id: "prj_001",
+              reason: "Mainboard rusak",
+              note: null,
+              status: "COMPLETED",
+              started_at: "2026-11-26T08:00:00Z",
+              resolution_note: "Perbaikan sementara selesai, namun menunggu servis resmi vendor",
+              completed_at: "2026-11-27T10:00:00Z",
+            },
+            meta: { request_id: "req_maint_complete_unavail" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.maintenance.completeMaintenance("maint_001", {
+        resolution_note: "Perbaikan sementara selesai, namun menunggu servis resmi vendor",
+        set_projector_available: false,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/maintenance/maint_001/complete");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(JSON.parse(options.body as string)).toEqual({
+        resolution_note: "Perbaikan sementara selesai, namun menunggu servis resmi vendor",
+        set_projector_available: false,
+      });
+
+      expect(result.data.status).toBe("COMPLETED");
+    });
+
+    it("handles 409 conflict when completeMaintenance encounters active loan", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PROJECTOR_HAS_ACTIVE_LOAN",
+              message: "Proyektor masih memiliki loan aktif.",
+            },
+            meta: { request_id: "req_maint_complete_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.maintenance.completeMaintenance("maint_001", {
+          resolution_note: "Selesai dibersihkan",
+          set_projector_available: true,
+        });
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("PROJECTOR_HAS_ACTIVE_LOAN");
+      }
+    });
+
+    it("handles 403 FORBIDDEN when unauthorized user attempts maintenance operations", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "FORBIDDEN",
+              message: "Akses ditolak. Peran STAFF atau ADMIN diperlukan.",
+            },
+            meta: { request_id: "req_maint_forbidden" },
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.maintenance.createMaintenance("prj_001", {
+          reason: "Uji otorisasi",
+        });
+        expect.unreachable("Should have failed with 403");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.code).toBe("FORBIDDEN");
+      }
+    });
+
+    it("handles 404 PROJECTOR_NOT_FOUND when starting maintenance on invalid projector", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "PROJECTOR_NOT_FOUND",
+              message: "Proyektor dengan ID yang diminta tidak ditemukan.",
+            },
+            meta: { request_id: "req_maint_p404" },
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.maintenance.createMaintenance("prj_invalid", {
+          reason: "Proyektor fiktif",
+        });
+        expect.unreachable("Should have failed with 404");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(404);
+        expect(apiErr.code).toBe("PROJECTOR_NOT_FOUND");
+      }
+    });
+  });
+
   describe("Network and Transport Resilience", () => {
     it("handles network failure and maps cleanly to ApiClientError", async () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("Failed to fetch"));

@@ -145,6 +145,94 @@ describe("StaffMaintenanceView", () => {
       expect(completeMaintenanceMock).toHaveBeenCalledTimes(2);
     });
   });
+
+  it("completes maintenance with set_projector_available: false when uncheck checkbox", async () => {
+    const user = userEvent.setup();
+    completeMaintenanceMock.mockResolvedValueOnce({
+      data: {
+        id: "maint_1",
+        projector_id: "prj_3",
+        reason: "Lampu redup",
+        note: null,
+        status: "COMPLETED",
+        started_at: "2026-11-26T02:00:00Z",
+        resolution_note: "Perlu servis lanjutan di bengkel.",
+        completed_at: "2026-11-26T06:00:00Z",
+      },
+      meta: { request_id: "req_done_unavail" },
+    });
+
+    render(<StaffMaintenanceView />);
+
+    await user.click(await screen.findByRole("button", { name: "Selesaikan Maintenance" }));
+    await user.type(
+      screen.getByLabelText(/Catatan Penyelesaian/i),
+      "Perlu servis lanjutan di bengkel."
+    );
+
+    // Uncheck "Nyatakan unit layak digunakan..."
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Ya, Selesaikan" }));
+
+    await waitFor(() => {
+      expect(completeMaintenanceMock).toHaveBeenCalledWith("maint_1", {
+        resolution_note: "Perlu servis lanjutan di bengkel.",
+        set_projector_available: false,
+      });
+    });
+
+    expect(await screen.findByText("Catatan maintenance diselesaikan.")).toBeInTheDocument();
+  });
+
+  it("handles pagination navigation when multiple pages of maintenance exist", async () => {
+    const user = userEvent.setup();
+    listMaintenanceMock.mockResolvedValue({
+      data: [
+        {
+          id: "maint_1",
+          projector_id: "prj_3",
+          reason: "Lampu redup",
+          note: null,
+          status: "IN_PROGRESS",
+          started_at: "2026-11-26T02:00:00Z",
+          resolution_note: null,
+          completed_at: null,
+        },
+      ],
+      meta: {
+        request_id: "req_m_paged",
+        pagination: { page: 1, page_size: 20, total_items: 25, total_pages: 2 },
+      },
+    });
+
+    render(<StaffMaintenanceView />);
+
+    expect(await screen.findByRole("button", { name: "Berikutnya" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName.toLowerCase() === "p" &&
+          (el.textContent?.includes("Halaman 1 dari 2") ?? false)
+      )
+    ).toBeInTheDocument();
+
+    const nextBtn = screen.getByRole("button", { name: "Berikutnya" });
+    expect(nextBtn).toBeEnabled();
+
+    await user.click(nextBtn);
+
+    await waitFor(() => {
+      expect(listMaintenanceMock).toHaveBeenCalledWith({
+        page: 2,
+        page_size: 20,
+        status: "IN_PROGRESS",
+      });
+    });
+  });
 });
 
 describe("StaffMaintenanceDetailView", () => {
