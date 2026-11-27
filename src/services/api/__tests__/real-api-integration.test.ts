@@ -1109,6 +1109,377 @@ describe("Real API Service Integration (Contract-Compliant)", () => {
     });
   });
 
+  describe("STAFF Pickup & Return Inspection Transactions (POST /staff/bookings/{id}/pickup, GET/POST /staff/loans)", () => {
+    it("confirms pickup for KOMTING with Idempotency-Key and transitions booking to FULFILLED and unit to BORROWED", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              booking: { id: "bkg_pickup_01", status: "FULFILLED" },
+              loan: {
+                id: "loan_new_01",
+                status: "ACTIVE",
+                picked_up_at: "2026-11-27T02:00:00Z",
+              },
+              projector: { id: "prj_001", physical_status: "BORROWED" },
+            },
+            meta: { request_id: "req_pickup_komting_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.qr.confirmPickup(
+        "bkg_pickup_01",
+        {
+          qr_payload: "opaque_qr_token_komting",
+          confirmed: true,
+          received_by: "KOMTING",
+          representative_name: null,
+          note: null,
+        },
+        "idemp_key_pickup_komting"
+      );
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/staff/bookings/bkg_pickup_01/pickup");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Idempotency-Key")).toBe("idemp_key_pickup_komting");
+
+      const parsedBody = JSON.parse(options.body as string);
+      expect(parsedBody.confirmed).toBe(true);
+      expect(parsedBody.received_by).toBe("KOMTING");
+      expect(parsedBody.representative_name).toBeNull();
+
+      expect(result.data.booking.status).toBe("FULFILLED");
+      expect(result.data.loan.status).toBe("ACTIVE");
+      expect(result.data.projector.physical_status).toBe("BORROWED");
+    });
+
+    it("confirms pickup for REPRESENTATIVE with representative_name and note", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              booking: { id: "bkg_pickup_02", status: "FULFILLED" },
+              loan: {
+                id: "loan_new_02",
+                status: "ACTIVE",
+                picked_up_at: "2026-11-27T02:05:00Z",
+              },
+              projector: { id: "prj_002", physical_status: "BORROWED" },
+            },
+            meta: { request_id: "req_pickup_rep_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.qr.confirmPickup(
+        "bkg_pickup_02",
+        {
+          qr_payload: "opaque_qr_token_rep",
+          confirmed: true,
+          received_by: "REPRESENTATIVE",
+          representative_name: "Bambang Pamungkas",
+          note: "Membawa surat mandat kelas",
+        },
+        "idemp_key_pickup_rep"
+      );
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      const parsedBody = JSON.parse(options.body as string);
+      expect(parsedBody.received_by).toBe("REPRESENTATIVE");
+      expect(parsedBody.representative_name).toBe("Bambang Pamungkas");
+      expect(parsedBody.note).toBe("Membawa surat mandat kelas");
+      expect(result.data.loan.id).toBe("loan_new_02");
+    });
+
+    it("handles pickup failure when booking is ineligible or window expired (409 conflict)", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "BOOKING_NOT_PICKUP_ELIGIBLE",
+              message:
+                "Batas waktu pickup telah terlewati (window expired). Booking tidak dapat diambil.",
+            },
+            meta: { request_id: "req_pickup_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.qr.confirmPickup(
+          "bkg_expired",
+          {
+            qr_payload: "expired_token",
+            confirmed: true,
+            received_by: "KOMTING",
+            representative_name: null,
+            note: null,
+          },
+          "idemp_key_conflict"
+        );
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("BOOKING_NOT_PICKUP_ELIGIBLE");
+        expect(apiErr.message).toContain("jendela waktu pengambilan");
+      }
+    });
+
+    it("lists staff loans with status filter (ACTIVE) and pagination query", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "loan_001",
+                booking_id: "bkg_001",
+                projector_id: "prj_001",
+                komting_id: "usr_komting_1",
+                status: "ACTIVE",
+                picked_up_at: "2026-11-27T02:00:00Z",
+                returned_at: null,
+                return_condition: null,
+              },
+            ],
+            meta: {
+              request_id: "req_loan_list",
+              pagination: {
+                page: 1,
+                page_size: 20,
+                total_items: 1,
+                total_pages: 1,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const result = await apiServices.loan.listStaffLoans({
+        status: "ACTIVE",
+        page: 1,
+        page_size: 20,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/staff/loans");
+      expect(url).toContain("status=ACTIVE");
+      expect(url).toContain("page=1");
+      expect(url).toContain("page_size=20");
+
+      const headers = new Headers(options.headers);
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]?.status).toBe("ACTIVE");
+      expect(result.meta.pagination.total_items).toBe(1);
+    });
+
+    it("gets staff loan detail by ID with URL encoding and handles 404 cleanly", async () => {
+      // 1. Success
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "loan/special#1",
+              booking_id: "bkg_001",
+              projector_id: "prj_001",
+              komting_id: "usr_komting_1",
+              status: "ACTIVE",
+              picked_up_at: "2026-11-27T02:00:00Z",
+              returned_at: null,
+              return_condition: null,
+            },
+            meta: { request_id: "req_loan_detail" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const res = await apiServices.loan.getStaffLoan("loan/special#1");
+      const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/v1/staff/loans/loan%2Fspecial%231");
+      expect(res.data.id).toBe("loan/special#1");
+
+      // 2. 404
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "LOAN_NOT_FOUND",
+              message: "Data peminjaman (loan) tidak ditemukan di sistem.",
+            },
+            meta: { request_id: "req_loan_404" },
+          }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      try {
+        await apiServices.loan.getStaffLoan("non_existent_loan");
+        expect.unreachable("Should have failed with 404");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(404);
+        expect(apiErr.code).toBe("LOAN_NOT_FOUND");
+      }
+    });
+
+    it("confirms return for NORMAL + COMPLETE unit using FormData without forced application/json header", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              loan: {
+                id: "loan_return_01",
+                status: "RETURNED",
+                returned_at: "2026-11-27T04:00:00Z",
+              },
+              inspection: {
+                projector_condition: "NORMAL",
+                accessories_condition: "COMPLETE",
+                unit_disposition: "AVAILABLE",
+              },
+              projector: {
+                id: "prj_001",
+                physical_status: "AVAILABLE",
+              },
+            },
+            meta: { request_id: "req_return_normal_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const formData = new FormData();
+      formData.append("qr_payload", "opaque_qr_return_token");
+      formData.append("confirmed", "true");
+      formData.append("returned_by", "KOMTING");
+      formData.append("projector_condition", "NORMAL");
+      formData.append("accessories_condition", "COMPLETE");
+
+      const result = await apiServices.loan.confirmReturn(
+        "loan_return_01",
+        formData,
+        "idemp_key_return_normal"
+      );
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain("/api/v1/staff/loans/loan_return_01/return");
+      expect(options.method).toBe("POST");
+
+      const headers = new Headers(options.headers);
+      // Per API Contract §17: FormData must NOT have manual Content-Type: application/json
+      expect(headers.get("Content-Type")).toBeNull();
+      expect(headers.get("Authorization")).toBe("Bearer test_bearer_token_xyz");
+      expect(headers.get("Idempotency-Key")).toBe("idemp_key_return_normal");
+
+      expect(options.body).toBe(formData);
+      expect(result.data.loan.status).toBe("RETURNED");
+      expect(result.data.inspection.unit_disposition).toBe("AVAILABLE");
+      expect(result.data.projector.physical_status).toBe("AVAILABLE");
+    });
+
+    it("confirms return for DAMAGED unit and server designates unit_disposition as MAINTENANCE", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              loan: {
+                id: "loan_return_02",
+                status: "RETURNED",
+                returned_at: "2026-11-27T04:15:00Z",
+              },
+              inspection: {
+                projector_condition: "DAMAGED",
+                accessories_condition: "COMPLETE",
+                unit_disposition: "MAINTENANCE",
+              },
+              projector: {
+                id: "prj_002",
+                physical_status: "MAINTENANCE",
+              },
+            },
+            meta: { request_id: "req_return_damaged_ok" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const dummyFile = new File(["dummy image content"], "evidence_damage.jpg", {
+        type: "image/jpeg",
+      });
+
+      const formData = new FormData();
+      formData.append("qr_payload", "opaque_qr_return_token_2");
+      formData.append("confirmed", "true");
+      formData.append("returned_by", "REPRESENTATIVE");
+      formData.append("representative_name", "Doni Perwakilan");
+      formData.append("projector_condition", "DAMAGED");
+      formData.append("accessories_condition", "COMPLETE");
+      formData.append("note", "Port HDMI longgar");
+      formData.append("evidence_photo", dummyFile);
+
+      const result = await apiServices.loan.confirmReturn(
+        "loan_return_02",
+        formData,
+        "idemp_key_return_damaged"
+      );
+
+      expect(result.data.loan.status).toBe("RETURNED");
+      expect(result.data.inspection.projector_condition).toBe("DAMAGED");
+      expect(result.data.inspection.unit_disposition).toBe("MAINTENANCE");
+      expect(result.data.projector.physical_status).toBe("MAINTENANCE");
+    });
+
+    it("handles return failure when loan is not active (409 LOAN_NOT_ACTIVE)", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "LOAN_NOT_ACTIVE",
+              message: "Loan telah berstatus RETURNED dan tidak dapat diproses kembali.",
+            },
+            meta: { request_id: "req_return_conflict" },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+      const formData = new FormData();
+      formData.append("qr_payload", "token");
+      formData.append("confirmed", "true");
+
+      try {
+        await apiServices.loan.confirmReturn("loan_already_closed", formData, "idemp_ret_conflict");
+        expect.unreachable("Should have failed with 409");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiClientError);
+        const apiErr = err as ApiClientError;
+        expect(apiErr.status).toBe(409);
+        expect(apiErr.code).toBe("LOAN_NOT_ACTIVE");
+      }
+    });
+  });
+
   describe("Network and Transport Resilience", () => {
     it("handles network failure and maps cleanly to ApiClientError", async () => {
       fetchSpy.mockRejectedValueOnce(new TypeError("Failed to fetch"));

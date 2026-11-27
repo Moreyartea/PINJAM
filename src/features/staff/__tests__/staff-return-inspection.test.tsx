@@ -110,4 +110,50 @@ describe("ReturnInspectionForm", () => {
 
     expect(await screen.findByText("Unit Masuk Maintenance")).toBeInTheDocument();
   });
+
+  it("handles return by REPRESENTATIVE, enforces representative name, and reuses Idempotency-Key on retry", async () => {
+    const user = userEvent.setup();
+    confirmReturnMock.mockRejectedValueOnce(new Error("Network timeout")).mockResolvedValueOnce({
+      data: {
+        loan: { id: "loan_active_1", status: "RETURNED", returned_at: "2026-11-26T05:00:00Z" },
+        inspection: {
+          projector_condition: "NORMAL",
+          accessories_condition: "COMPLETE",
+          unit_disposition: "AVAILABLE",
+        },
+        projector: { id: "prj_1", physical_status: "AVAILABLE" },
+      },
+      meta: { request_id: "req_rep" },
+    });
+
+    render(<ReturnInspectionForm loan={ACTIVE_LOAN} initialQrPayload="qr_rep_1" />);
+
+    await user.selectOptions(screen.getByLabelText(/Dikembalikan Oleh/i), "REPRESENTATIVE");
+
+    // Click confirm without name
+    await user.click(screen.getByRole("button", { name: "Konfirmasi Pengembalian" }));
+    expect(screen.getByText("Nama perwakilan pengembali wajib diisi.")).toBeInTheDocument();
+    expect(confirmReturnMock).not.toHaveBeenCalled();
+
+    // Type representative name
+    await user.type(screen.getByLabelText(/Nama Perwakilan Pengembali/i), "Rian Perwakilan");
+    await user.click(screen.getByRole("button", { name: "Konfirmasi Pengembalian" }));
+    await user.click(screen.getByRole("button", { name: "Ya, Selesaikan Return" }));
+
+    // First attempt fails with network error
+    expect(await screen.findByText(/Konfirmasi Pengembalian Gagal/i)).toBeInTheDocument();
+    expect(confirmReturnMock).toHaveBeenCalledTimes(1);
+    const firstKey = confirmReturnMock.mock.calls[0]?.[2] as string;
+
+    // Retry with identical data reuses the same Idempotency-Key
+    await user.click(screen.getByRole("button", { name: "Ya, Selesaikan Return" }));
+
+    await waitFor(() => {
+      expect(confirmReturnMock).toHaveBeenCalledTimes(2);
+    });
+    const secondKey = confirmReturnMock.mock.calls[1]?.[2] as string;
+    expect(secondKey).toBe(firstKey);
+
+    expect(await screen.findByText("Inspeksi & Return Dikonfirmasi")).toBeInTheDocument();
+  });
 });

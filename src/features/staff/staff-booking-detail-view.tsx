@@ -268,6 +268,33 @@ export function StaffBookingDetailView({ bookingId }: { bookingId: string }) {
                 />
               )}
             </>
+          ) : booking.status === "FULFILLED" ? (
+            <Card tone="success">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge tone="success">SUDAH DIAMBIL</Badge>
+                  <StatusBadge status={booking.status} />
+                </div>
+                <CardTitle className="mt-2 text-base">Serah-Terima Telah Selesai</CardTitle>
+                <CardDescription>
+                  Unit proyektor telah diserahkan kepada peminjam dan saat ini berada dalam status
+                  peminjaman aktif (Loan ACTIVE).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <Alert tone="info" title="Status Transaksi">
+                  Peminjaman sedang berlangsung. Ketika peminjam mengembalikan unit, proses inspeksi
+                  dapat dilakukan melalui menu Loan atau scan QR Return.
+                </Alert>
+              </CardContent>
+              <CardFooter className="justify-end">
+                <Link href="/staff/loans">
+                  <Button variant="primary" size="sm">
+                    Buka Daftar Peminjaman (Loan)
+                  </Button>
+                </Link>
+              </CardFooter>
+            </Card>
           ) : (
             <Alert tone="info" title="Pickup Tidak Tersedia">
               Booking berstatus <strong>{booking.status}</strong>. Konfirmasi pickup hanya tersedia

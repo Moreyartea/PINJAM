@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { Alert } from "@/components/feedback/alert";
 import { Badge, StatusBadge } from "@/components/ui/badge";
@@ -152,6 +153,18 @@ export function PickupConfirmationPanel({
             <span>{formatJakartaDateTime(result.loan.picked_up_at)}</span>
           </div>
         </CardContent>
+        <CardFooter className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t-2 border-[var(--color-surface-subtle)]">
+          <Link href={`/staff/bookings/${encodeURIComponent(result.booking.id)}`}>
+            <Button variant="outline" size="sm">
+              Lihat Detail Booking
+            </Button>
+          </Link>
+          <Link href={`/staff/loans/${encodeURIComponent(result.loan.id)}`}>
+            <Button variant="primary" size="sm">
+              Buka Detail Loan Baru
+            </Button>
+          </Link>
+        </CardFooter>
       </Card>
     );
   }

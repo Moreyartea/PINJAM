@@ -181,7 +181,12 @@ export function StaffLoanListView() {
                     </div>
                   </CardContent>
 
-                  <CardFooter className="justify-end">
+                  <CardFooter className="flex flex-wrap items-center justify-between gap-2">
+                    <Link href={`/staff/loans/${encodeURIComponent(loan.id)}`}>
+                      <Button variant="outline" size="sm">
+                        Detail Loan
+                      </Button>
+                    </Link>
                     {loan.status === "ACTIVE" ? (
                       <Link href={`/staff/loans/${encodeURIComponent(loan.id)}/return`}>
                         <Button variant="primary" size="sm">
