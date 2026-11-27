@@ -254,7 +254,12 @@ export function AdminAuditLogsListView() {
         <>
           <Card>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Tabel log audit sistem"
+                className="overflow-x-auto focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              >
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b-2 border-[var(--color-border)] bg-[var(--color-surface-subtle)]">

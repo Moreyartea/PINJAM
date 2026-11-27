@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MenuIcon, XIcon } from "@/components/ui/icons";
 import { env } from "@/lib/config/env";
@@ -65,6 +65,7 @@ function SidebarNavList({
             key={item.href}
             href={item.href}
             onClick={onNavigate}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
               "flex items-center justify-between gap-2 px-3 py-2.5 text-sm font-bold rounded-[var(--radius-sm)] transition-colors",
               isActive
@@ -97,18 +98,55 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close mobile drawer on Escape and lock background scroll
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  const handleCloseMobileMenu = () => {
+    setMobileMenuOpen(false);
+    menuButtonRef.current?.focus();
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
+      {/* Skip to main content link for keyboard / screen reader accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[var(--z-modal)] focus:px-4 focus:py-2 focus:bg-[var(--color-primary)] focus:text-[var(--color-ink)] focus:nb-border focus:nb-shadow-sm focus:rounded-[var(--radius-sm)] focus:font-bold focus:outline-none"
+      >
+        Lewati ke konten utama
+      </a>
+
       {/* Topbar */}
       <header className="sticky top-0 z-[var(--z-sticky)] bg-[var(--color-surface)] border-b-2 border-[var(--border-color)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {navItems.length > 0 && (
               <button
+                ref={menuButtonRef}
                 type="button"
                 aria-label="Buka menu navigasi"
                 aria-expanded={mobileMenuOpen}
+                aria-controls="mobile-navigation-drawer"
                 onClick={() => setMobileMenuOpen(true)}
                 className="lg:hidden p-2 nb-border nb-shadow-sm rounded-[var(--radius-sm)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-subtle)] cursor-pointer"
               >
@@ -151,9 +189,10 @@ export function AppShell({
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-[var(--z-drawer)] lg:hidden flex bg-black/50"
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={handleCloseMobileMenu}
         >
           <div
+            id="mobile-navigation-drawer"
             role="dialog"
             aria-modal="true"
             aria-label="Menu navigasi"
@@ -165,7 +204,7 @@ export function AppShell({
               <button
                 type="button"
                 aria-label="Tutup menu navigasi"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={handleCloseMobileMenu}
                 className="p-1.5 nb-border rounded-[var(--radius-sm)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-subtle)] cursor-pointer"
               >
                 <XIcon className="h-4 w-4" />
@@ -174,7 +213,7 @@ export function AppShell({
             <SidebarNavList
               items={navItems}
               pathname={pathname}
-              onNavigate={() => setMobileMenuOpen(false)}
+              onNavigate={handleCloseMobileMenu}
             />
           </div>
         </div>

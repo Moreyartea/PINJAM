@@ -83,6 +83,7 @@ describe("AdminAuditLogsListView", () => {
     expect(screen.getByText("usr_admin_01")).toBeInTheDocument();
     expect(screen.getByText(/Perpanjangan kelas sore/)).toBeInTheDocument();
     expect(screen.getByText("READ-ONLY")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tabel log audit sistem" })).toBeInTheDocument();
 
     // Ensure no edit, delete, or correction controls exist
     expect(screen.queryByRole("button", { name: /edit|ubah|hapus|delete|koreksi/i })).toBeNull();

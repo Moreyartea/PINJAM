@@ -34,7 +34,11 @@ function SnapshotPanel({
             Tidak ada snapshot data (null).
           </p>
         ) : (
-          <pre className="overflow-x-auto rounded-[var(--radius-sm)] border-2 border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-3 font-mono text-xs leading-relaxed">
+          <pre
+            tabIndex={0}
+            aria-label={`Snapshot ${title}`}
+            className="overflow-x-auto rounded-[var(--radius-sm)] border-2 border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-3 font-mono text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          >
             {JSON.stringify(data, null, 2)}
           </pre>
         )}
